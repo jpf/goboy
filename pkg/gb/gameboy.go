@@ -2,6 +2,7 @@ package gb
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/Humpheh/goboy/pkg/apu"
 	"github.com/Humpheh/goboy/pkg/cart"
@@ -16,6 +17,11 @@ const (
 	CyclesFrame = ClockSpeed / FramesSecond
 )
 
+// Command represents a control command from the 9P interface.
+type Command struct {
+	Name string
+}
+
 // Gameboy is the master struct which contains all of the sub components
 // for running the Gameboy emulator.
 type Gameboy struct {
@@ -28,6 +34,10 @@ type Gameboy struct {
 
 	Debug  DebugFlags
 	paused bool
+
+	// 9P server support (exported for testing)
+	Mu          sync.RWMutex
+	CommandChan chan Command
 
 	timerCounter int
 
@@ -97,7 +107,51 @@ func (gb *Gameboy) Update() int {
 
 // togglePaused switches the paused state of the execution.
 func (gb *Gameboy) togglePaused() {
+	gb.Mu.Lock()
+	defer gb.Mu.Unlock()
 	gb.paused = !gb.paused
+}
+
+// IsPaused returns whether the emulator is currently paused.
+// This method is safe to call from other goroutines.
+func (gb *Gameboy) IsPaused() bool {
+	gb.Mu.RLock()
+	defer gb.Mu.RUnlock()
+	return gb.paused
+}
+
+// SetPaused sets the paused state of the emulator.
+func (gb *Gameboy) SetPaused(paused bool) {
+	gb.Mu.Lock()
+	defer gb.Mu.Unlock()
+	gb.paused = paused
+}
+
+// GetCommandChan returns the command channel for sending control commands.
+// This returns a send-only channel for use by the 9P server goroutine.
+func (gb *Gameboy) GetCommandChan() chan<- Command {
+	return gb.CommandChan
+}
+
+// ProcessCommands drains and processes all pending commands from the 9P interface.
+// This should be called at frame boundaries from the main game loop.
+func (gb *Gameboy) ProcessCommands() {
+	for {
+		select {
+		case cmd := <-gb.CommandChan:
+			switch cmd.Name {
+			case "pause":
+				gb.SetPaused(true)
+			case "resume":
+				gb.SetPaused(false)
+			default:
+				// Unknown command, ignore
+			}
+		default:
+			// No more commands
+			return
+		}
+	}
 }
 
 // ToggleSoundChannel toggles a sound channel for debugging.
@@ -354,6 +408,8 @@ func (gb *Gameboy) setup() {
 	gb.bgPalette = NewPalette()
 
 	gb.initKeyHandlers()
+
+	gb.CommandChan = make(chan Command, 10)
 }
 
 // New returns a new Gameboy instance.
