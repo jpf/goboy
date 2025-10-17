@@ -57,6 +57,9 @@ func (d *stateDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 	case "cpu":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
 		return []p9.QID{qid}, newP9CPUFile(d.attacher.gameboy, qid), nil
+	case "cartridge":
+		qid := d.attacher.qids.Get(p9.TypeDir)
+		return []p9.QID{qid}, &cartridgeDir{attacher: d.attacher, qid: qid}, nil
 	default:
 		return nil, nil, syscall.ENOENT
 	}
@@ -76,6 +79,7 @@ func (d *stateDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) {
 		name string
 		typ  p9.QIDType
 	}{
+		{"cartridge", p9.TypeDir},
 		{"cpu", p9.TypeRegular},
 		{"memory", p9.TypeDir},
 	}
@@ -174,6 +178,166 @@ func (d *stateDir) Rename(directory p9.File, name string) error {
 
 // SetAttr prevents attribute changes on directories
 func (d *stateDir) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
+	return syscall.EPERM
+}
+
+// cartridgeDir is the /state/cartridge directory
+type cartridgeDir struct {
+	statfs
+	p9.DefaultWalkGetAttr
+	templatefs.NotSymlinkFile
+	templatefs.IsDir
+	templatefs.NilCloser
+	templatefs.NoopRenamed
+	templatefs.XattrUnimplemented
+	templatefs.NotLockable
+
+	attacher *p9Attacher
+	qid      p9.QID
+}
+
+func (d *cartridgeDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
+	if mode == p9.ReadOnly {
+		return d.qid, 4096, nil
+	}
+	return p9.QID{}, 0, syscall.EPERM
+}
+
+func (d *cartridgeDir) Walk(names []string) ([]p9.QID, p9.File, error) {
+	if len(names) == 0 {
+		return []p9.QID{d.qid}, d, nil
+	}
+
+	if len(names) > 1 {
+		return nil, nil, syscall.ENOENT
+	}
+
+	// Check if file has been "deleted" (for tar extraction)
+	path := "state/cartridge/" + names[0]
+	if _, deleted := d.attacher.unlinked.Load(path); deleted {
+		return nil, nil, syscall.ENOENT
+	}
+
+	switch names[0] {
+	case "info":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		return []p9.QID{qid}, newP9CartridgeInfoFile(d.attacher.gameboy, qid), nil
+	default:
+		return nil, nil, syscall.ENOENT
+	}
+}
+
+func (d *cartridgeDir) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) {
+	return d.qid, req, p9.Attr{
+		Mode:  p9.ModeDirectory | 0755,
+		UID:   p9.UID(os.Getuid()),
+		GID:   p9.GID(os.Getgid()),
+		NLink: 2,
+	}, nil
+}
+
+func (d *cartridgeDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) {
+	files := []struct {
+		name string
+		typ  p9.QIDType
+	}{
+		{"info", p9.TypeRegular},
+	}
+
+	if offset >= uint64(len(files)) {
+		return nil, nil
+	}
+
+	var dirents []p9.Dirent
+	end := int(offset) + int(count)
+	if end > len(files) {
+		end = len(files)
+	}
+
+	for i, file := range files[offset:end] {
+		dirents = append(dirents, p9.Dirent{
+			QID:    d.attacher.qids.Get(file.typ),
+			Type:   file.typ,
+			Offset: offset + uint64(i) + 1,
+			Name:   file.name,
+		})
+	}
+	return dirents, nil
+}
+
+// UnlinkAt marks files as deleted for tar extraction support.
+// Virtual files can't actually be deleted, but we track them to hide from Walk.
+func (d *cartridgeDir) UnlinkAt(name string, flags uint32) error {
+	// Accept unlink for files that exist
+	switch name {
+	case "info":
+		path := "state/cartridge/" + name
+		d.attacher.unlinked.Store(path, true)
+		return nil
+	default:
+		return syscall.ENOENT
+	}
+}
+
+// Mkdir prevents directory creation
+func (d *cartridgeDir) Mkdir(name string, permissions p9.FileMode, uid p9.UID, gid p9.GID) (p9.QID, error) {
+	return p9.QID{}, syscall.EPERM
+}
+
+// Create handles tar extraction by opening existing virtual files
+func (d *cartridgeDir) Create(name string, flags p9.OpenFlags, permissions p9.FileMode, uid p9.UID, gid p9.GID) (p9.File, p9.QID, uint32, error) {
+	// Remove from unlinked set (file is being "created")
+	path := "state/cartridge/" + name
+	d.attacher.unlinked.Delete(path)
+
+	// Virtual files always exist, so "create" just opens them
+	switch name {
+	case "info":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		file := newP9CartridgeInfoFile(d.attacher.gameboy, qid)
+		// Open the file for writing (will fail since it's read-only)
+		_, iounit, err := file.Open(flags)
+		if err != nil {
+			return nil, p9.QID{}, 0, err
+		}
+		return file, qid, iounit, nil
+	default:
+		return nil, p9.QID{}, 0, syscall.ENOENT
+	}
+}
+
+// Link prevents hard link creation
+func (d *cartridgeDir) Link(target p9.File, newname string) error {
+	return syscall.EPERM
+}
+
+// Mknod prevents device node creation
+func (d *cartridgeDir) Mknod(name string, mode p9.FileMode, major uint32, minor uint32, uid p9.UID, gid p9.GID) (p9.QID, error) {
+	return p9.QID{}, syscall.EPERM
+}
+
+// RenameAt prevents file renaming
+func (d *cartridgeDir) RenameAt(oldname string, newdir p9.File, newname string) error {
+	return syscall.EPERM
+}
+
+// Symlink prevents symlink creation
+func (d *cartridgeDir) Symlink(oldname string, newname string, uid p9.UID, gid p9.GID) (p9.QID, error) {
+	return p9.QID{}, syscall.EPERM
+}
+
+// FSync is a no-op for directories
+func (d *cartridgeDir) FSync() error {
+	return nil
+}
+
+// Rename prevents directory renaming
+func (d *cartridgeDir) Rename(directory p9.File, name string) error {
+	return syscall.EPERM
+}
+
+// SetAttr prevents attribute changes on directories
+func (d *cartridgeDir) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
 	return syscall.EPERM
 }
 

@@ -22,6 +22,8 @@ STRUCTURE
 /README                  This file
 /ctl                     Control interface (read status, write commands)
 /state/                  Emulator state directory
+  cartridge/
+    info                 ROM header metadata (text format, read-only)
   cpu                    CPU registers and program counter (text format)
   memory/
     vram                 Video RAM (16KB binary, both banks)
@@ -42,6 +44,33 @@ STATE FILES
 -----------
 Text files use KEY=0xVALUE format with hex values.
 Binary files are raw byte dumps matching internal memory layout.
+
+state/cartridge/info     ROM header metadata (text format, read-only)
+                         title - Game title from ROM (ASCII string)
+                         type - MBC type (ROM, MBC1, MBC2, MBC3, MBC5, UNKNOWN)
+                         romSize - ROM size in bytes (decimal)
+                         ramSize - RAM size in bytes (decimal)
+                         cgbSupport - CGB flag (8-bit hex)
+                         sgbSupport - SGB flag (8-bit hex)
+                         hasBattery - Battery backup flag (8-bit hex)
+                         headerChecksum - ROM header checksum (8-bit hex)
+                         globalChecksum - Global ROM checksum (16-bit hex)
+
+                         Example:
+                         # ROM Information
+                         title=POKEMON BLUE
+                         type=MBC3
+                         romSize=1048576
+                         ramSize=32768
+
+                         # Features
+                         cgbSupport=0x00
+                         sgbSupport=0x00
+                         hasBattery=0x01
+
+                         # Checksums
+                         headerChecksum=0x3C
+                         globalChecksum=0xB0A2
 
 state/cpu                CPU state (text format, key=value pairs)
                          AF, BC, DE, HL - Register pairs (16-bit hex)
@@ -86,6 +115,9 @@ state/memory/state       Memory banking state (text format, key=value pairs)
 
 EXAMPLES
 --------
+# Read ROM metadata
+cat /mnt/goboy/state/cartridge/info
+
 # Read CPU state
 cat /mnt/goboy/state/cpu
 
