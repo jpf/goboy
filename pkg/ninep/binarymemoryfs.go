@@ -33,9 +33,23 @@ func (fsys *binaryMemoryFS) Open(name string) (fs.File, error) {
 }
 
 func (f *binaryMemoryFile) Stat() (fs.FileInfo, error) {
+	size := f.parent.size
+
+	// For dynamic size (-1), get actual memory size
+	if size == -1 {
+		f.parent.gb.Mu.RLock()
+		mem := f.parent.getMemory(f.parent.gb)
+		if mem != nil {
+			size = int64(len(mem))
+		} else {
+			size = 0
+		}
+		f.parent.gb.Mu.RUnlock()
+	}
+
 	return &binaryMemoryFileInfo{
 		name: "memory",
-		size: f.parent.size,
+		size: size,
 	}, nil
 }
 
@@ -49,13 +63,28 @@ func (f *binaryMemoryFile) ReadAt(buf []byte, offset int64) (int, error) {
 	if offset < 0 {
 		return 0, errors.New("negative offset")
 	}
-	if offset >= f.parent.size {
+
+	// Get memory region (may be nil for cartridges without RAM)
+	f.parent.gb.Mu.RLock()
+	mem := f.parent.getMemory(f.parent.gb)
+
+	// Handle nil memory (e.g., ROM-only cartridge with no RAM)
+	if mem == nil {
+		f.parent.gb.Mu.RUnlock()
 		return 0, io.EOF
 	}
 
-	// Lock gameboy state for consistent read
-	mem := f.parent.getMemory(f.parent.gb)
-	f.parent.gb.Mu.RLock()
+	// Check bounds using actual memory size if size is dynamic (-1)
+	size := f.parent.size
+	if size == -1 {
+		size = int64(len(mem))
+	}
+
+	if offset >= size {
+		f.parent.gb.Mu.RUnlock()
+		return 0, io.EOF
+	}
+
 	n := copy(buf, mem[offset:])
 	f.parent.gb.Mu.RUnlock()
 
@@ -76,10 +105,26 @@ func (f *binaryMemoryFile) WriteAt(data []byte, offset int64) (int, error) {
 	if offset > math.MaxInt || offset < 0 {
 		return 0, errors.New("offset out of range")
 	}
-	if offset >= f.parent.size {
+
+	// Check if memory exists (e.g., ROM-only cartridge has no RAM)
+	f.parent.gb.Mu.RLock()
+	mem := f.parent.getMemory(f.parent.gb)
+	if mem == nil {
+		f.parent.gb.Mu.RUnlock()
+		return 0, errors.New("no RAM available (ROM-only cartridge)")
+	}
+
+	// Check bounds using actual memory size if size is dynamic (-1)
+	size := f.parent.size
+	if size == -1 {
+		size = int64(len(mem))
+	}
+	f.parent.gb.Mu.RUnlock()
+
+	if offset >= size {
 		return 0, errors.New("offset beyond file size")
 	}
-	if offset+int64(len(data)) > f.parent.size {
+	if offset+int64(len(data)) > size {
 		return 0, errors.New("write beyond file size")
 	}
 
