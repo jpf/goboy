@@ -24,6 +24,7 @@ STRUCTURE
 /state/                  Emulator state directory
   cartridge/
     info                 ROM header metadata (text format, read-only)
+    ram                  Cartridge RAM/save data (binary, size varies by MBC)
   cpu                    CPU registers and program counter (text format)
   memory/
     vram                 Video RAM (16KB binary, both banks)
@@ -113,6 +114,24 @@ state/memory/state       Memory banking state (text format, key=value pairs)
                          hdmaLength (0-255)
                          hdmaActive (0x00=false, 0x01=true)
 
+state/cartridge/ram      Cartridge RAM/save data (binary format, offset-based access)
+                         Size varies by cartridge type:
+                         - ROM-only: No RAM (file not present)
+                         - MBC2: 8KB (0x2000 bytes)
+                         - MBC1: 32KB (0x8000 bytes)
+                         - MBC3: 32KB (0x8000 bytes)
+                         - MBC5: 128KB (0x20000 bytes)
+
+                         Example:
+                         # Backup save data
+                         cat state/cartridge/ram > ~/backup.sav
+
+                         # Restore save data
+                         cat ~/backup.sav > state/cartridge/ram
+
+                         # Hex dump save data
+                         xxd state/cartridge/ram | head
+
 EXAMPLES
 --------
 # Read ROM metadata
@@ -148,10 +167,16 @@ echo pause > /mnt/goboy/ctl
 echo -n '\x10\x20\x30\x40' | dd of=/mnt/goboy/state/memory/oam bs=1 seek=0 conv=notrunc
 echo resume > /mnt/goboy/ctl
 
-# Dump all memory regions
+##Dump all memory regions
 xxd /mnt/goboy/state/memory/wram > wram.hex
 xxd /mnt/goboy/state/memory/oam > oam.hex
 xxd /mnt/goboy/state/memory/highram > highram.hex
+
+# Backup cartridge save data
+cat /mnt/goboy/state/cartridge/ram > ~/pokemon-blue-save.sav
+
+# Restore cartridge save data
+cat ~/pokemon-blue-save.sav > /mnt/goboy/state/cartridge/ram
 
 NOTES
 -----

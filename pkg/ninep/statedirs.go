@@ -222,6 +222,21 @@ func (d *cartridgeDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 	case "info":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
 		return []p9.QID{qid}, newP9CartridgeInfoFile(d.attacher.gameboy, qid), nil
+	case "ram":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		fsys := &binaryMemoryFS{
+			gb: d.attacher.gameboy,
+			getMemory: func(gb *gb.Gameboy) []byte {
+				cart := gb.GetCartridge()
+				if cart == nil {
+					return nil
+				}
+				return cart.GetRAM()
+			},
+			size:        -1, // Dynamic size based on cartridge type
+			commandName: "cartridge-ram-write",
+		}
+		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	default:
 		return nil, nil, syscall.ENOENT
 	}
@@ -242,6 +257,7 @@ func (d *cartridgeDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) 
 		typ  p9.QIDType
 	}{
 		{"info", p9.TypeRegular},
+		{"ram", p9.TypeRegular},
 	}
 
 	if offset >= uint64(len(files)) {
@@ -270,7 +286,7 @@ func (d *cartridgeDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) 
 func (d *cartridgeDir) UnlinkAt(name string, flags uint32) error {
 	// Accept unlink for files that exist
 	switch name {
-	case "info":
+	case "info", "ram":
 		path := "state/cartridge/" + name
 		d.attacher.unlinked.Store(path, true)
 		return nil
@@ -291,19 +307,36 @@ func (d *cartridgeDir) Create(name string, flags p9.OpenFlags, permissions p9.Fi
 	d.attacher.unlinked.Delete(path)
 
 	// Virtual files always exist, so "create" just opens them
+	var file p9.File
+	qid := d.attacher.qids.Get(p9.TypeRegular)
+
 	switch name {
 	case "info":
-		qid := d.attacher.qids.Get(p9.TypeRegular)
-		file := newP9CartridgeInfoFile(d.attacher.gameboy, qid)
-		// Open the file for writing (will fail since it's read-only)
-		_, iounit, err := file.Open(flags)
-		if err != nil {
-			return nil, p9.QID{}, 0, err
+		file = newP9CartridgeInfoFile(d.attacher.gameboy, qid)
+	case "ram":
+		fsys := &binaryMemoryFS{
+			gb: d.attacher.gameboy,
+			getMemory: func(gb *gb.Gameboy) []byte {
+				cart := gb.GetCartridge()
+				if cart == nil {
+					return nil
+				}
+				return cart.GetRAM()
+			},
+			size:        -1,
+			commandName: "cartridge-ram-write",
 		}
-		return file, qid, iounit, nil
+		file = newP9BinaryFile(d.attacher.gameboy, qid, fsys)
 	default:
 		return nil, p9.QID{}, 0, syscall.ENOENT
 	}
+
+	// Open the file for writing
+	_, iounit, err := file.Open(flags)
+	if err != nil {
+		return nil, p9.QID{}, 0, err
+	}
+	return file, qid, iounit, nil
 }
 
 // Link prevents hard link creation

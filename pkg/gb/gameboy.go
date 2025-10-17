@@ -261,6 +261,16 @@ func (gb *Gameboy) ProcessCommands() {
 					gb.cpu.Divider = int(val)
 				}
 				gb.Mu.Unlock()
+			case "cartridge-ram-write":
+				gb.Mu.Lock()
+				cart := gb.GetCartridge()
+				if cart != nil {
+					ram := cart.GetRAM()
+					if ram != nil {
+						copy(ram[cmd.Offset:], cmd.Data)
+					}
+				}
+				gb.Mu.Unlock()
 			default:
 				// Unknown command, ignore
 			}
