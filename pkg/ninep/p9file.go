@@ -55,6 +55,8 @@ type rootDir struct {
 	templatefs.IsDir
 	templatefs.NilCloser
 	templatefs.NoopRenamed
+	templatefs.XattrUnimplemented
+	templatefs.NotLockable
 
 	attacher *p9Attacher
 	qid      p9.QID
@@ -85,6 +87,9 @@ func (d *rootDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 	case "ctl":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
 		return []p9.QID{qid}, newCtlFile(d.attacher.gameboy, qid), nil
+	case "state":
+		qid := d.attacher.qids.Get(p9.TypeDir)
+		return []p9.QID{qid}, &stateDir{attacher: d.attacher, qid: qid}, nil
 	default:
 		return nil, nil, syscall.ENOENT
 	}
@@ -108,6 +113,7 @@ func (d *rootDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) {
 	}{
 		{"README", p9.TypeRegular},
 		{"ctl", p9.TypeRegular},
+		{"state", p9.TypeDir},
 	}
 
 	if offset >= uint64(len(files)) {
@@ -140,6 +146,8 @@ type readmeFile struct {
 	templatefs.NotDirectoryFile
 	templatefs.NotSymlinkFile
 	templatefs.NoopRenamed
+	templatefs.XattrUnimplemented
+	templatefs.NotLockable
 
 	qid    p9.QID
 	reader *strings.Reader
@@ -190,6 +198,8 @@ type p9CtlFile struct {
 	templatefs.NotDirectoryFile
 	templatefs.NotSymlinkFile
 	templatefs.NoopRenamed
+	templatefs.XattrUnimplemented
+	templatefs.NotLockable
 
 	qid      p9.QID
 	gameboy  *gb.Gameboy

@@ -104,3 +104,61 @@ func TestPausedThreadSafety(t *testing.T) {
 	<-done
 	<-done
 }
+
+func TestProcessCommands_VramWrite(t *testing.T) {
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Initialize VRAM to zeros
+	for i := range gb.memory.VRAM {
+		gb.memory.VRAM[i] = 0
+	}
+
+	// Queue vram-write command
+	data := []byte{0xAA, 0xBB, 0xCC, 0xDD}
+	gb.CommandChan <- Command{
+		Name:   "vram-write",
+		Offset: 0x1000,
+		Data:   data,
+	}
+
+	// Process commands
+	gb.ProcessCommands()
+
+	// Verify write
+	assert.Equal(t, byte(0xAA), gb.memory.VRAM[0x1000])
+	assert.Equal(t, byte(0xBB), gb.memory.VRAM[0x1001])
+	assert.Equal(t, byte(0xCC), gb.memory.VRAM[0x1002])
+	assert.Equal(t, byte(0xDD), gb.memory.VRAM[0x1003])
+}
+
+func TestProcessCommands_VramWriteMultiple(t *testing.T) {
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Initialize VRAM to zeros
+	for i := range gb.memory.VRAM {
+		gb.memory.VRAM[i] = 0
+	}
+
+	// Queue multiple vram-write commands
+	gb.CommandChan <- Command{
+		Name:   "vram-write",
+		Offset: 0,
+		Data:   []byte{0x01, 0x02},
+	}
+	gb.CommandChan <- Command{
+		Name:   "vram-write",
+		Offset: 0x2000,
+		Data:   []byte{0x03, 0x04},
+	}
+
+	// Process commands
+	gb.ProcessCommands()
+
+	// Verify both writes
+	assert.Equal(t, byte(0x01), gb.memory.VRAM[0])
+	assert.Equal(t, byte(0x02), gb.memory.VRAM[1])
+	assert.Equal(t, byte(0x03), gb.memory.VRAM[0x2000])
+	assert.Equal(t, byte(0x04), gb.memory.VRAM[0x2001])
+}

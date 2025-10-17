@@ -19,7 +19,9 @@ const (
 
 // Command represents a control command from the 9P interface.
 type Command struct {
-	Name string
+	Name   string
+	Offset int64  // For memory writes
+	Data   []byte // For memory writes
 }
 
 // Gameboy is the master struct which contains all of the sub components
@@ -133,6 +135,17 @@ func (gb *Gameboy) GetCommandChan() chan<- Command {
 	return gb.CommandChan
 }
 
+// GetVRAM returns a pointer to the VRAM array for 9P interface access.
+// Thread safety: Callers must acquire Mu.RLock() before reading.
+func (gb *Gameboy) GetVRAM() *[0x4000]byte {
+	return &gb.memory.VRAM
+}
+
+// SetMemory sets the memory pointer for testing purposes.
+func (gb *Gameboy) SetMemory(mem *Memory) {
+	gb.memory = mem
+}
+
 // ProcessCommands drains and processes all pending commands from the 9P interface.
 // This should be called at frame boundaries from the main game loop.
 func (gb *Gameboy) ProcessCommands() {
@@ -144,6 +157,11 @@ func (gb *Gameboy) ProcessCommands() {
 				gb.SetPaused(true)
 			case "resume":
 				gb.SetPaused(false)
+			case "vram-write":
+				// Lock for write safety
+				gb.Mu.Lock()
+				copy(gb.memory.VRAM[cmd.Offset:], cmd.Data)
+				gb.Mu.Unlock()
 			default:
 				// Unknown command, ignore
 			}
