@@ -69,21 +69,17 @@ func (f *p9CartridgeInfoFile) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.
 
 func (f *p9CartridgeInfoFile) ReadAt(p []byte, offset int64) (int, error) {
 	if !f.opened {
-		// Try to open
-		var err error
-		f.file, err = f.infoFS.Open(".")
-		if err != nil {
-			return 0, syscall.EINVAL
-		}
-		f.opened = true
-	}
-
-	reader, ok := f.file.(interface{ ReadAt([]byte, int64) (int, error) })
-	if !ok {
 		return 0, syscall.EINVAL
 	}
 
-	return reader.ReadAt(p, offset)
+	reader, ok := f.file.(interface {
+		Read([]byte) (int, error)
+	})
+	if !ok {
+		return 0, syscall.ENOSYS
+	}
+
+	return reader.Read(p)
 }
 
 func (f *p9CartridgeInfoFile) WriteAt(p []byte, offset int64) (int, error) {
