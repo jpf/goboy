@@ -19,10 +19,11 @@ const (
 
 // Command represents a control command from the 9P interface.
 type Command struct {
-	Name   string
-	Offset int                // For binary writes (vram, wram, oam, highram)
-	Data   []byte             // For binary writes
-	State  map[string]byte    // For text state writes (memorystate)
+	Name     string
+	Offset   int                // For binary writes (vram, wram, oam, highram)
+	Data     []byte             // For binary writes
+	State    map[string]byte    // For text state writes (memorystate)
+	CPUState map[string]uint16  // For CPU state writes
 }
 
 // Gameboy is the master struct which contains all of the sub components
@@ -166,9 +167,21 @@ func (gb *Gameboy) GetMemoryState() (vramBank, wramBank, hdmaLength byte, hdmaAc
 	return gb.memory.VRAMBank, gb.memory.WRAMBank, gb.memory.hdmaLength, gb.memory.hdmaActive
 }
 
+// GetCPUState returns CPU register and timer state for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetCPUState() (af, bc, de, hl, sp, pc uint16, divider int) {
+	return gb.cpu.AF.HiLo(), gb.cpu.BC.HiLo(), gb.cpu.DE.HiLo(),
+		gb.cpu.HL.HiLo(), gb.cpu.SP.HiLo(), gb.cpu.PC, gb.cpu.Divider
+}
+
 // SetMemory sets the memory pointer for testing purposes.
 func (gb *Gameboy) SetMemory(mem *Memory) {
 	gb.memory = mem
+}
+
+// SetCPU sets the CPU pointer for testing purposes.
+func (gb *Gameboy) SetCPU(cpu *CPU) {
+	gb.cpu = cpu
 }
 
 // ProcessCommands drains and processes all pending commands from the 9P interface.
@@ -213,6 +226,30 @@ func (gb *Gameboy) ProcessCommands() {
 				}
 				if val, ok := cmd.State["hdmaActive"]; ok {
 					gb.memory.hdmaActive = val != 0
+				}
+				gb.Mu.Unlock()
+			case "cpu-write":
+				gb.Mu.Lock()
+				if val, ok := cmd.CPUState["AF"]; ok {
+					gb.cpu.AF.Set(val)
+				}
+				if val, ok := cmd.CPUState["BC"]; ok {
+					gb.cpu.BC.Set(val)
+				}
+				if val, ok := cmd.CPUState["DE"]; ok {
+					gb.cpu.DE.Set(val)
+				}
+				if val, ok := cmd.CPUState["HL"]; ok {
+					gb.cpu.HL.Set(val)
+				}
+				if val, ok := cmd.CPUState["SP"]; ok {
+					gb.cpu.SP.Set(val)
+				}
+				if val, ok := cmd.CPUState["PC"]; ok {
+					gb.cpu.PC = val
+				}
+				if val, ok := cmd.CPUState["Divider"]; ok {
+					gb.cpu.Divider = int(val)
 				}
 				gb.Mu.Unlock()
 			default:

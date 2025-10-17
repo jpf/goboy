@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/hugelgupf/p9/fsimpl/templatefs"
@@ -16,8 +17,9 @@ import (
 
 // p9Attacher implements p9.Attacher and returns the root directory
 type p9Attacher struct {
-	gameboy *gb.Gameboy
-	qids    *p9.QIDGenerator
+	gameboy  *gb.Gameboy
+	qids     *p9.QIDGenerator
+	unlinked sync.Map // Tracks "deleted" files for tar extraction (key: "path/file", value: bool)
 }
 
 // NewP9Attacher creates a p9.Attacher for the virtual filesystem

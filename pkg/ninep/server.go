@@ -22,6 +22,7 @@ STRUCTURE
 /README                  This file
 /ctl                     Control interface (read status, write commands)
 /state/                  Emulator state directory
+  cpu                    CPU registers and program counter (text format)
   memory/
     vram                 Video RAM (16KB binary, both banks)
     wram                 Work RAM (36KB binary, 8 banks + gap)
@@ -41,6 +42,18 @@ STATE FILES
 -----------
 Text files use KEY=0xVALUE format with hex values.
 Binary files are raw byte dumps matching internal memory layout.
+
+state/cpu                CPU state (text format, key=value pairs)
+                         AF, BC, DE, HL - Register pairs (16-bit hex)
+                         SP - Stack pointer (16-bit hex)
+                         PC - Program counter (16-bit hex)
+                         Divider - Timer divider register (16-bit hex)
+
+                         Example:
+                         AF=0x01B0
+                         BC=0x0013
+                         PC=0x0100
+                         Divider=0x00AB
 
 state/memory/vram        Video RAM (16KB binary, both banks concatenated)
                          Bytes 0x0000-0x1FFF: Bank 0
@@ -73,14 +86,23 @@ state/memory/state       Memory banking state (text format, key=value pairs)
 
 EXAMPLES
 --------
-# Save complete memory state
+# Read CPU state
+cat /mnt/goboy/state/cpu
+
+# Modify program counter
+echo "PC=0x0150" > /mnt/goboy/state/cpu
+
+# Set multiple registers at once
+echo -e "AF=0x01B0\nBC=0x0013\nPC=0x0100" > /mnt/goboy/state/cpu
+
+# Save complete emulator state (memory + CPU)
 echo pause > /mnt/goboy/ctl
-tar -czf state.tar.gz -C /mnt/goboy/state memory/
+tar -czf fullstate.tar.gz -C /mnt/goboy/state cpu memory/
 echo resume > /mnt/goboy/ctl
 
-# Restore memory state
+# Restore complete emulator state
 echo pause > /mnt/goboy/ctl
-tar -xzf state.tar.gz -C /mnt/goboy/state
+tar -xzf fullstate.tar.gz -C /mnt/goboy/state
 echo resume > /mnt/goboy/ctl
 
 # Read memory banking state
