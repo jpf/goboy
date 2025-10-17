@@ -63,7 +63,7 @@ func (f *vramFile) Write(p []byte) (n int, err error) {
 	// Queue write command for frame boundary processing
 	cmd := gb.Command{
 		Name:   "vram-write",
-		Offset: int64(f.readPos),
+		Offset: f.readPos,
 		Data:   make([]byte, len(p)),
 	}
 	copy(cmd.Data, p)
@@ -106,7 +106,7 @@ func (f *vramFile) WriteAt(p []byte, offset int64) (n int, err error) {
 
 	cmd := gb.Command{
 		Name:   "vram-write",
-		Offset: offset,
+		Offset: int(offset),
 		Data:   make([]byte, len(p)),
 	}
 	copy(cmd.Data, p)

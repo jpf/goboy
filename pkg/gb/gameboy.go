@@ -20,8 +20,9 @@ const (
 // Command represents a control command from the 9P interface.
 type Command struct {
 	Name   string
-	Offset int64  // For memory writes
-	Data   []byte // For memory writes
+	Offset int                // For binary writes (vram, wram, oam, highram)
+	Data   []byte             // For binary writes
+	State  map[string]byte    // For text state writes (memorystate)
 }
 
 // Gameboy is the master struct which contains all of the sub components
@@ -141,6 +142,30 @@ func (gb *Gameboy) GetVRAM() *[0x4000]byte {
 	return &gb.memory.VRAM
 }
 
+// GetWRAM returns pointer to WRAM array for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetWRAM() *[0x9000]byte {
+	return &gb.memory.WRAM
+}
+
+// GetOAM returns pointer to OAM array for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetOAM() *[0x100]byte {
+	return &gb.memory.OAM
+}
+
+// GetHighRAM returns pointer to HighRAM array for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetHighRAM() *[0x100]byte {
+	return &gb.memory.HighRAM
+}
+
+// GetMemoryState returns memory banking and DMA state for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetMemoryState() (vramBank, wramBank, hdmaLength byte, hdmaActive bool) {
+	return gb.memory.VRAMBank, gb.memory.WRAMBank, gb.memory.hdmaLength, gb.memory.hdmaActive
+}
+
 // SetMemory sets the memory pointer for testing purposes.
 func (gb *Gameboy) SetMemory(mem *Memory) {
 	gb.memory = mem
@@ -161,6 +186,34 @@ func (gb *Gameboy) ProcessCommands() {
 				// Lock for write safety
 				gb.Mu.Lock()
 				copy(gb.memory.VRAM[cmd.Offset:], cmd.Data)
+				gb.Mu.Unlock()
+			case "wram-write":
+				gb.Mu.Lock()
+				copy(gb.memory.WRAM[cmd.Offset:], cmd.Data)
+				gb.Mu.Unlock()
+			case "oam-write":
+				gb.Mu.Lock()
+				copy(gb.memory.OAM[cmd.Offset:], cmd.Data)
+				gb.Mu.Unlock()
+			case "highram-write":
+				gb.Mu.Lock()
+				copy(gb.memory.HighRAM[cmd.Offset:], cmd.Data)
+				gb.Mu.Unlock()
+			case "memorystate-write":
+				gb.Mu.Lock()
+				// Apply state updates (partial updates supported)
+				if val, ok := cmd.State["VRAMBank"]; ok {
+					gb.memory.VRAMBank = val
+				}
+				if val, ok := cmd.State["WRAMBank"]; ok {
+					gb.memory.WRAMBank = val
+				}
+				if val, ok := cmd.State["hdmaLength"]; ok {
+					gb.memory.hdmaLength = val
+				}
+				if val, ok := cmd.State["hdmaActive"]; ok {
+					gb.memory.hdmaActive = val != 0
+				}
 				gb.Mu.Unlock()
 			default:
 				// Unknown command, ignore
@@ -427,7 +480,10 @@ func (gb *Gameboy) setup() {
 
 	gb.initKeyHandlers()
 
-	gb.CommandChan = make(chan Command, 10)
+	// Buffer size 32 supports simultaneous writes from tar extraction of current
+	// state files (5 in state/memory/) plus future state files (apu channels,
+	// ppu state, cartridge state, etc.). Prevents blocking during full state restore.
+	gb.CommandChan = make(chan Command, 32)
 }
 
 // New returns a new Gameboy instance.

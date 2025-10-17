@@ -117,7 +117,7 @@ func TestVramFile_Write(t *testing.T) {
 	select {
 	case cmd := <-gameboy.CommandChan:
 		assert.Equal(t, "vram-write", cmd.Name)
-		assert.Equal(t, int64(0), cmd.Offset)
+		assert.Equal(t, 0, cmd.Offset)
 		assert.Equal(t, data, cmd.Data)
 	default:
 		t.Fatal("Expected command in channel")
@@ -242,7 +242,7 @@ func TestVramFile_WriteAt(t *testing.T) {
 	select {
 	case cmd := <-gameboy.CommandChan:
 		assert.Equal(t, "vram-write", cmd.Name)
-		assert.Equal(t, int64(0x800), cmd.Offset)
+		assert.Equal(t, 0x800, cmd.Offset)
 		assert.Equal(t, data, cmd.Data)
 	default:
 		t.Fatal("Expected command in channel")

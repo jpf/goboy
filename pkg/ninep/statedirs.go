@@ -9,6 +9,8 @@ import (
 
 	"github.com/hugelgupf/p9/fsimpl/templatefs"
 	"github.com/hugelgupf/p9/p9"
+
+	"github.com/Humpheh/goboy/pkg/gb"
 )
 
 // stateDir is the /state directory
@@ -126,6 +128,41 @@ func (d *memoryDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 	case "vram":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
 		return []p9.QID{qid}, newP9VramFile(d.attacher.gameboy, qid), nil
+
+	case "wram":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		fsys := &binaryMemoryFS{
+			gb:          d.attacher.gameboy,
+			getMemory:   func(gb *gb.Gameboy) []byte { return gb.GetWRAM()[:] },
+			size:        0x9000,
+			commandName: "wram-write",
+		}
+		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
+
+	case "oam":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		fsys := &binaryMemoryFS{
+			gb:          d.attacher.gameboy,
+			getMemory:   func(gb *gb.Gameboy) []byte { return gb.GetOAM()[:] },
+			size:        0x100,
+			commandName: "oam-write",
+		}
+		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
+
+	case "highram":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		fsys := &binaryMemoryFS{
+			gb:          d.attacher.gameboy,
+			getMemory:   func(gb *gb.Gameboy) []byte { return gb.GetHighRAM()[:] },
+			size:        0x100,
+			commandName: "highram-write",
+		}
+		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
+
+	case "state":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		return []p9.QID{qid}, newP9MemoryStateFile(d.attacher.gameboy, qid), nil
+
 	default:
 		return nil, nil, syscall.ENOENT
 	}
@@ -146,6 +183,10 @@ func (d *memoryDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) {
 		typ  p9.QIDType
 	}{
 		{"vram", p9.TypeRegular},
+		{"wram", p9.TypeRegular},
+		{"oam", p9.TypeRegular},
+		{"highram", p9.TypeRegular},
+		{"state", p9.TypeRegular},
 	}
 
 	if offset >= uint64(len(files)) {
