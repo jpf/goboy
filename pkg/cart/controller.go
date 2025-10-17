@@ -46,6 +46,11 @@ type BankingController interface {
 	// LoadSaveData loads some save data into the cartridge. The banking
 	// controller implementation can decide how this data should be loaded.
 	LoadSaveData(data []byte)
+
+	// GetRAM returns direct access to the cartridge RAM for offset-based
+	// read/write operations via 9P interface. Returns nil for cartridges
+	// without RAM.
+	GetRAM() []byte
 }
 
 // Cart represents a GameBoy cartridge.

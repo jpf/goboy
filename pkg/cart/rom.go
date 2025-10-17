@@ -35,3 +35,8 @@ func (r *ROM) GetSaveData() []byte {
 // LoadSaveData loads the save data into the cartridge. As RAM is not supported
 // on this memory controller, this is a noop.
 func (r *ROM) LoadSaveData([]byte) {}
+
+// GetRAM returns the cartridge RAM. ROM cartridges have no RAM, so returns nil.
+func (r *ROM) GetRAM() []byte {
+	return nil
+}

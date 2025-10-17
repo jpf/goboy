@@ -73,3 +73,8 @@ func (r *MBC2) GetSaveData() []byte {
 func (r *MBC2) LoadSaveData(data []byte) {
 	r.ram = data
 }
+
+// GetRAM returns direct access to the cartridge RAM.
+func (r *MBC2) GetRAM() []byte {
+	return r.ram
+}
