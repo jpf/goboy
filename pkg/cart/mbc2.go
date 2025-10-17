@@ -78,3 +78,9 @@ func (r *MBC2) LoadSaveData(data []byte) {
 func (r *MBC2) GetRAM() []byte {
 	return r.ram
 }
+
+// GetBankingState returns the current banking state for 9P access.
+func (r *MBC2) GetBankingState() (romBank uint32, ramBank uint32, ramEnabled bool) {
+	// MBC2 doesn't have RAM banking, so ramBank is always 0
+	return r.romBank, 0, r.ramEnabled
+}
