@@ -174,6 +174,15 @@ func (gb *Gameboy) GetCPUState() (af, bc, de, hl, sp, pc uint16, divider int) {
 		gb.cpu.HL.HiLo(), gb.cpu.SP.HiLo(), gb.cpu.PC, gb.cpu.Divider
 }
 
+// GetCartridge returns the loaded cartridge for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetCartridge() *cart.Cart {
+	if gb.memory == nil {
+		return nil
+	}
+	return gb.memory.Cart
+}
+
 // SetMemory sets the memory pointer for testing purposes.
 func (gb *Gameboy) SetMemory(mem *Memory) {
 	gb.memory = mem
