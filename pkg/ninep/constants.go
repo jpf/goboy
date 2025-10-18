@@ -7,5 +7,5 @@ package ninep
 const (
 	CommandPause  = "pause"
 	CommandResume = "resume"
-	CommandReset  = "reset" // Not yet implemented
+	CommandReset  = "reset"
 )

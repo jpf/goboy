@@ -44,7 +44,7 @@ func (f *ctlFile) Read(p []byte) (n int, err error) {
 		status = "paused"
 	}
 
-	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state (not yet implemented)\n", status)
+	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state\n", status)
 
 	// Read from current position
 	if f.readPos >= len(content) {
@@ -67,10 +67,8 @@ func (f *ctlFile) Write(p []byte) (n int, err error) {
 
 	// Send command to emulator
 	switch command {
-	case CommandPause, CommandResume:
+	case CommandPause, CommandResume, CommandReset:
 		f.parent.gb.GetCommandChan() <- gb.Command{Name: command}
-	case CommandReset:
-		return 0, fmt.Errorf("reset not yet implemented")
 	default:
 		return 0, fmt.Errorf("unknown command: %s", command)
 	}
@@ -88,7 +86,7 @@ func (f *ctlFile) Stat() (fs.FileInfo, error) {
 	if f.parent.gb.IsPaused() {
 		status = "paused"
 	}
-	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state (not yet implemented)\n", status)
+	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state\n", status)
 
 	return &ctlFileInfo{
 		name: "ctl",

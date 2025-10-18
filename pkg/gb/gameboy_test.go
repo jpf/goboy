@@ -225,3 +225,123 @@ func TestProcessCommands_MemoryStateWrite_PartialUpdate(t *testing.T) {
 			gb.memory.VRAMBank, gb.memory.WRAMBank)
 	}
 }
+
+func TestReset(t *testing.T) {
+	// Create a fully initialized gameboy using setup()
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Simulate running state - modify CPU, memory, PPU, APU, misc state
+	gb.Mu.Lock()
+	gb.cpu.PC = 0x5000 // Not at boot value
+	gb.cpu.AF.Set(0xABCD)
+	gb.timerCounter = 1234
+	gb.halted = true
+	gb.interruptsOn = true
+	gb.interruptsEnabling = true
+	gb.scanlineCounter = 100
+	gb.thisCpuTicks = 999
+	gb.screenData[0][0] = [3]uint8{123, 45, 67}
+	gb.PreparedData[0][0] = [3]uint8{89, 10, 11}
+	gb.bgPriority[0][0] = true
+	gb.Mu.Unlock()
+
+	// Store reference to cart to verify it's preserved
+	originalCart := gb.memory.Cart
+
+	// Call Reset()
+	gb.Mu.Lock()
+	gb.Reset()
+	gb.Mu.Unlock()
+
+	// Verify CPU state reset to boot values
+	if gb.cpu.PC != 0x100 {
+		t.Errorf("After reset: PC = 0x%04X, want 0x0100", gb.cpu.PC)
+	}
+	if gb.cpu.AF.HiLo() != 0x01B0 { // DMG boot value (non-CGB)
+		t.Errorf("After reset: AF = 0x%04X, want 0x01B0", gb.cpu.AF.HiLo())
+	}
+
+	// Verify misc state reset
+	if gb.timerCounter != 0 {
+		t.Errorf("After reset: timerCounter = %d, want 0", gb.timerCounter)
+	}
+	if gb.halted != false {
+		t.Errorf("After reset: halted = %v, want false", gb.halted)
+	}
+	if gb.interruptsOn != false {
+		t.Errorf("After reset: interruptsOn = %v, want false", gb.interruptsOn)
+	}
+	if gb.interruptsEnabling != false {
+		t.Errorf("After reset: interruptsEnabling = %v, want false", gb.interruptsEnabling)
+	}
+	if gb.thisCpuTicks != 0 {
+		t.Errorf("After reset: thisCpuTicks = %d, want 0", gb.thisCpuTicks)
+	}
+
+	// Verify PPU state reset
+	if gb.scanlineCounter != 456 {
+		t.Errorf("After reset: scanlineCounter = %d, want 456", gb.scanlineCounter)
+	}
+
+	// Verify screen buffers cleared to white (255, 255, 255)
+	if gb.screenData[0][0] != [3]uint8{255, 255, 255} {
+		t.Errorf("After reset: screenData[0][0] = %v, want [255 255 255]", gb.screenData[0][0])
+	}
+	if gb.PreparedData[0][0] != [3]uint8{255, 255, 255} {
+		t.Errorf("After reset: PreparedData[0][0] = %v, want [255 255 255]", gb.PreparedData[0][0])
+	}
+	if gb.bgPriority[0][0] != false {
+		t.Errorf("After reset: bgPriority[0][0] = %v, want false", gb.bgPriority[0][0])
+	}
+
+	// Verify cart preserved (same pointer)
+	if gb.memory.Cart != originalCart {
+		t.Error("After reset: Cart was not preserved")
+	}
+
+	// Verify options preserved
+	if gb.options.cgbMode != false {
+		t.Error("After reset: options changed unexpectedly")
+	}
+
+	// Verify CommandChan preserved and still functional
+	select {
+	case gb.CommandChan <- Command{Name: "test"}:
+		// Success - channel still works
+	default:
+		t.Error("After reset: CommandChan not functional")
+	}
+}
+
+func TestProcessCommands_Reset(t *testing.T) {
+	// Create fully initialized gameboy
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Modify state to non-boot values
+	gb.cpu.PC = 0x5000
+	gb.cpu.AF.Set(0xABCD)
+	gb.halted = true
+	gb.timerCounter = 1234
+
+	// Queue reset command
+	gb.CommandChan <- Command{Name: "reset"}
+
+	// Process the command
+	gb.ProcessCommands()
+
+	// Verify reset was applied
+	if gb.cpu.PC != 0x100 {
+		t.Errorf("After reset command: PC = 0x%04X, want 0x0100", gb.cpu.PC)
+	}
+	if gb.cpu.AF.HiLo() != 0x01B0 {
+		t.Errorf("After reset command: AF = 0x%04X, want 0x01B0", gb.cpu.AF.HiLo())
+	}
+	if gb.halted != false {
+		t.Errorf("After reset command: halted = %v, want false", gb.halted)
+	}
+	if gb.timerCounter != 0 {
+		t.Errorf("After reset command: timerCounter = %d, want 0", gb.timerCounter)
+	}
+}

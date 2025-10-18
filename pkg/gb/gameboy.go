@@ -328,6 +328,10 @@ func (gb *Gameboy) ProcessCommands() {
 				gb.SetPaused(true)
 			case "resume":
 				gb.SetPaused(false)
+			case "reset":
+				gb.Mu.Lock()
+				gb.Reset()
+				gb.Mu.Unlock()
 			case "vram-write":
 				// Lock for write safety
 				gb.Mu.Lock()
@@ -847,6 +851,44 @@ func (gb *Gameboy) init(romFile string) error {
 	fmt.Printf("Loaded ROM: %s\n", gb.memory.Cart.GetName())
 	gb.cgbMode = gb.options.cgbMode && hasCGB
 	return nil
+}
+
+// Reset the emulator to power-on state while preserving the loaded ROM.
+// Cartridge RAM is preserved for battery-backed carts (matches real hardware behavior).
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) Reset() {
+	// Preserve cart
+	cart := gb.memory.Cart
+
+	// Reset CPU to boot state
+	gb.cpu.Init(gb.options.cgbMode)
+
+	// Reset Memory (preserves cart)
+	gb.memory.Init(gb)
+	gb.memory.Cart = cart
+
+	// Reset PPU state
+	gb.scanlineCounter = 456
+	gb.screenCleared = false
+
+	// Clear screen buffers to white
+	for i := range gb.screenData {
+		for j := range gb.screenData[i] {
+			gb.screenData[i][j] = [3]uint8{255, 255, 255}
+			gb.PreparedData[i][j] = [3]uint8{255, 255, 255}
+			gb.bgPriority[i][j] = false
+		}
+	}
+
+	// Reset APU
+	gb.sound.Init(gb.options.sound)
+
+	// Reset misc state
+	gb.timerCounter = 0
+	gb.halted = false
+	gb.interruptsOn = false
+	gb.interruptsEnabling = false
+	gb.thisCpuTicks = 0
 }
 
 func (gb *Gameboy) initKeyHandlers() {
