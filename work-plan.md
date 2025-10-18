@@ -55,6 +55,66 @@ Implement a 9P filesystem interface for the GoBoy Game Boy emulator, exposing in
 - Validation returns errors synchronously to 9P client
 - All binary files support offset-based read/write
 
+### ✅ Phase 3 Part 1: CPU State (COMPLETE)
+
+**Commit:** (completed in previous session)
+
+**What Was Implemented:**
+- `/state/cpu` (text format, CPU registers and timer state)
+- Helper method `GetCPUState()` on Gameboy
+- `cpu-write` command handler for partial register updates
+- Text-based key=value format following memoryStateFS pattern
+- Support for hex (0x prefix) and decimal values
+
+**Test Coverage:**
+- Comprehensive unit tests for all register combinations
+- Validation tests for invalid formats and values
+- Race detector clean
+
+### ✅ Phase 3 Part 2: Cartridge Info and RAM (COMPLETE)
+
+**Commits:**
+- 9134e69 "Add GetCartridge() helper method for 9P access"
+- 2a355fe "Add cartridge info file to 9P interface"
+- bc36b35 "Fix cartridge info ReadAt to use Read() pattern"
+- 4f5d301 "Add GetRAM() method to BankingController interface"
+- 13f714f "Add MBC state getter methods for 9P access"
+- 2d60a07 "Add cartridge RAM filesystem for save data access"
+- 76ada51 "Handle nil RAM gracefully in binaryMemoryFS"
+- 5a0a17f "Fix dynamic size handling in p9BinaryFile GetAttr"
+
+**What Was Implemented:**
+- `/state/cartridge/info` (read-only ROM header metadata)
+  - Parses title, MBC type, ROM/RAM sizes, CGB/SGB flags, checksums
+  - Complete MBC type detection (ROM, MBC1, MBC2, MBC3, MBC5)
+  - Handles all ROM/RAM size encodings
+- `/state/cartridge/ram` (binary save data access)
+  - Dynamic size based on MBC type (8KB-128KB)
+  - Gracefully handles ROM-only cartridges (returns empty file)
+  - Offset-based read/write for save backup/restore
+- `GetRAM()` interface method on all MBC types
+- `GetBankingState()` methods on all MBC types
+- `GetRTCState()` method on MBC3
+- `cartridge-ram-write` command handler
+
+**Key Design Decisions:**
+- Cartridge info is read-only (ROM header is immutable)
+- RAM file returns empty (size 0) for ROM-only cartridges instead of error
+- Dynamic size (-1) properly handled in both fs.FS and p9.File layers
+- Thread-safe RAM access via GetRAM() interface method
+
+**What Works:**
+```bash
+# View ROM metadata
+cat /mnt/gb/state/cartridge/info
+
+# Backup save data
+cat /mnt/gb/state/cartridge/ram > backup.sav
+
+# Restore save data
+cat backup.sav > /mnt/gb/state/cartridge/ram
+```
+
 ### Current State of 9P Specification
 
 From the 9p-spec.md, the complete interface includes:
@@ -65,7 +125,7 @@ From the 9p-spec.md, the complete interface includes:
   ctl             ✅ Done (pause/resume working, reset deferred to Phase 5)
   rom             ⏸️ Deferred to Phase 5 (write-only ROM loading)
   state/
-    cpu           ❌ Phase 3 target
+    cpu           ✅ Done (Phase 3 Part 1)
     memory/
       vram        ✅ Done
       wram        ✅ Done
@@ -73,9 +133,9 @@ From the 9p-spec.md, the complete interface includes:
       highram     ✅ Done
       state       ✅ Done
     cartridge/
-      info        ❌ Phase 3 target
-      state       ❌ Phase 3 target
-      ram         ❌ Phase 3 target
+      info        ✅ Done (Phase 3 Part 2)
+      state       🔄 In Progress (Phase 3 Part 3)
+      ram         ✅ Done (Phase 3 Part 2)
     apu/
       state       ⏸️ Phase 4 (optional)
       waveform    ⏸️ Phase 4 (optional)
@@ -90,8 +150,8 @@ From the 9p-spec.md, the complete interface includes:
       dmgpalette  ⏸️ Phase 4 (optional)
 ```
 
-**Progress:** 6 of 25 files complete (24%)
-**Phase 3 Scope:** 4 files (cpu, cartridge/info, cartridge/state, cartridge/ram)
+**Progress:** 9 of 25 files complete (36%)
+**Phase 3 Remaining:** 1 file (cartridge/state)
 
 ## Phase 3 Analysis: CPU and Cartridge State
 
@@ -450,8 +510,58 @@ Phase 3 is now **well-scoped and achievable**. Key improvements:
 After Phase 3, you'll have **functional save states** for gameplay. Phase 4 (APU/PPU) and Phase 5 (ROM loading) are optional enhancements.
 
 **Next Steps:**
-1. ✅ Verify Phase 1/2 work correctly (1 hour manual testing)
-2. ✅ Start Phase 3 with CPU state (2-3 hours, low risk)
-3. ✅ Then cartridge info (2-3 hours, read-only)
-4. ✅ Then MBC types sequentially (10-15 hours)
-5. ✅ Test each MBC type independently (4-6 hours)
+1. ✅ Verify Phase 1/2 work correctly (DONE - tar extraction working)
+2. ✅ Start Phase 3 with CPU state (DONE - 2-3 hours)
+3. ✅ Then cartridge info (DONE - 2-3 hours, read-only working)
+4. ✅ Add GetRAM() and banking state getters (DONE - 2 hours)
+5. ✅ Implement cartridge RAM file (DONE - 2 hours with nil handling)
+6. 🔄 **IN PROGRESS:** Cartridge state filesystem (MBC-specific banking state)
+   - Estimated: 6-8 hours remaining
+   - Read: Type switch on MBC, return appropriate fields
+   - Write: Parse and validate, queue cartridge-state-write command
+   - Test: Each MBC type separately (ROM, MBC1, MBC2, MBC3, MBC5)
+
+## Phase 3 Part 3: Cartridge State (IN PROGRESS)
+
+### What Remains
+
+**File:** `/state/cartridge/state` (text format, MBC-dependent)
+
+**Format varies by MBC type:**
+
+- **ROM-only:** Empty or "# No banking state"
+- **MBC1:** romBank, ramBank, ramEnabled, romBanking (4 fields)
+- **MBC2:** romBank, ramBank, ramEnabled (3 fields, ramBank always 0)
+- **MBC3:** romBank, ramBank, ramEnabled + 11 RTC fields + timestamp (16 fields total)
+- **MBC5:** romBank (9-bit), ramBank, ramEnabled (3 fields)
+
+**Implementation Tasks:**
+
+1. **Create cartridgeStateFS** (similar to memoryStateFS pattern)
+   - Read: Type switch to determine MBC, format output
+   - Write: Parse key=value, validate fields
+   - Handle MBC3 RTC complexity (11 additional fields)
+
+2. **Add p9.File wrapper** (p9cartridgestatefile.go)
+   - Standard delegation pattern
+
+3. **Add to cartridgeDir** (statedirs.go)
+   - Walk/Readdir/Create/UnlinkAt handling
+
+4. **Add command handler** (gameboy.go)
+   - cartridge-state-write command
+   - Type switch to apply state per MBC type
+   - Add SetBankingState() methods to MBC types (or direct field writes)
+
+5. **Write comprehensive tests**
+   - Each MBC type separately
+   - Validation for out-of-range values
+   - MBC3 RTC state handling
+   - Race detector clean
+
+**Estimated Effort:** 6-8 hours
+- cartridgeStateFS implementation: 2-3 hours
+- MBC3 RTC complexity: 2-3 hours
+- Testing all MBC types: 2 hours
+
+**After This:** Phase 3 complete! Functional save states achieved.
