@@ -62,11 +62,24 @@ func (f *p9BinaryFile) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 }
 
 func (f *p9BinaryFile) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) {
+	// Get actual size (handles dynamic size -1 and nil memory)
+	size := f.fsys.size
+	if size == -1 {
+		f.gameboy.Mu.RLock()
+		mem := f.fsys.getMemory(f.gameboy)
+		if mem != nil {
+			size = int64(len(mem))
+		} else {
+			size = 0
+		}
+		f.gameboy.Mu.RUnlock()
+	}
+
 	return f.qid, req, p9.Attr{
 		Mode:      p9.ModeRegular | 0666,
 		UID:       p9.UID(os.Getuid()),
 		GID:       p9.GID(os.Getgid()),
-		Size:      uint64(f.fsys.size),
+		Size:      uint64(size),
 		NLink:     1,
 		BlockSize: 4096,
 	}, nil
