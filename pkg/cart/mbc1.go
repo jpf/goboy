@@ -101,3 +101,11 @@ func (r *MBC1) GetRAM() []byte {
 func (r *MBC1) GetBankingState() (romBank uint32, ramBank uint32, ramEnabled bool, romBanking bool) {
 	return r.romBank, r.ramBank, r.ramEnabled, r.romBanking
 }
+
+// SetBankingState updates the banking state from 9P writes.
+func (r *MBC1) SetBankingState(romBank, ramBank uint32, ramEnabled, romBanking bool) {
+	r.romBank = romBank
+	r.ramBank = ramBank
+	r.ramEnabled = ramEnabled
+	r.romBanking = romBanking
+}

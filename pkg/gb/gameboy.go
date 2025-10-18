@@ -1,7 +1,9 @@
 package gb
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/Humpheh/goboy/pkg/apu"
@@ -193,6 +195,128 @@ func (gb *Gameboy) SetCPU(cpu *CPU) {
 	gb.cpu = cpu
 }
 
+// GetAPU returns the APU for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetAPU() *apu.APU {
+	return gb.sound
+}
+
+// SetAPU sets the APU pointer for testing purposes.
+func (gb *Gameboy) SetAPU(sound *apu.APU) {
+	gb.sound = sound
+}
+
+// GetAPUState returns APU state for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetAPUState() (playing byte, memory [52]byte, lVol, rVol, tickCounter float64) {
+	return gb.sound.GetAPUState()
+}
+
+// GetPPUState returns PPU internal state for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetPPUState() (scanlineCounter int, screenCleared, cgbMode bool) {
+	return gb.scanlineCounter, gb.screenCleared, gb.cgbMode
+}
+
+// SetPPUState updates PPU internal state from 9P writes.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) SetPPUState(scanlineCounter int, screenCleared, cgbMode bool) {
+	gb.scanlineCounter = scanlineCounter
+	gb.screenCleared = screenCleared
+	gb.cgbMode = cgbMode
+}
+
+// GetTileScanline returns pointer to tileScanline array for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetTileScanline() *[160]uint8 {
+	return &gb.tileScanline
+}
+
+// GetBGPalette returns pointer to serialized bgPalette data for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetBGPalette() *[66]byte {
+	var data [66]byte
+	copy(data[0:64], gb.bgPalette.Palette)
+	data[64] = gb.bgPalette.Index
+	if gb.bgPalette.Inc {
+		data[65] = 0x01
+	} else {
+		data[65] = 0x00
+	}
+	return &data
+}
+
+// SetBGPalette sets the background palette for testing purposes.
+func (gb *Gameboy) SetBGPalette(pal *cgbPalette) {
+	gb.bgPalette = pal
+}
+
+// GetSpritePalette returns pointer to serialized spritePalette data for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) GetSpritePalette() *[66]byte {
+	var data [66]byte
+	copy(data[0:64], gb.spritePalette.Palette)
+	data[64] = gb.spritePalette.Index
+	if gb.spritePalette.Inc {
+		data[65] = 0x01
+	} else {
+		data[65] = 0x00
+	}
+	return &data
+}
+
+// SetSpritePalette sets the sprite palette for testing purposes.
+func (gb *Gameboy) SetSpritePalette(pal *cgbPalette) {
+	gb.spritePalette = pal
+}
+
+// GetBGPriority returns bit-packed bgPriority array for 9P access.
+// Caller must hold Gameboy.Mu lock.
+// Packs 160x144 bools into 2880 bytes (8 bools per byte).
+func (gb *Gameboy) GetBGPriority() *[2880]byte {
+	var data [2880]byte
+	for x := 0; x < ScreenWidth; x++ {
+		for y := 0; y < ScreenHeight; y++ {
+			if gb.bgPriority[x][y] {
+				byteIndex := x*18 + y/8 // 144/8 = 18 bytes per column
+				bitIndex := uint(y % 8)
+				data[byteIndex] |= 1 << bitIndex
+			}
+		}
+	}
+	return &data
+}
+
+// SetBGPriority sets a single bgPriority value for testing purposes.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) SetBGPriority(x, y int, value bool) {
+	gb.bgPriority[x][y] = value
+}
+
+// GetScreen returns flattened PreparedData array for 9P access.
+// Caller must hold Gameboy.Mu lock.
+// Flattens 160x144x3 RGB array into 69,120 bytes (column-major layout).
+func (gb *Gameboy) GetScreen() *[69120]byte {
+	var data [69120]byte
+	for x := 0; x < ScreenWidth; x++ {
+		for y := 0; y < ScreenHeight; y++ {
+			offset := x*ScreenHeight*3 + y*3
+			data[offset] = gb.PreparedData[x][y][0]     // R
+			data[offset+1] = gb.PreparedData[x][y][1]   // G
+			data[offset+2] = gb.PreparedData[x][y][2]   // B
+		}
+	}
+	return &data
+}
+
+// SetScreen sets a single pixel in PreparedData for testing purposes.
+// Caller must hold Gameboy.Mu lock.
+func (gb *Gameboy) SetScreen(x, y int, r, g, b uint8) {
+	gb.PreparedData[x][y][0] = r
+	gb.PreparedData[x][y][1] = g
+	gb.PreparedData[x][y][2] = b
+}
+
 // ProcessCommands drains and processes all pending commands from the 9P interface.
 // This should be called at frame boundaries from the main game loop.
 func (gb *Gameboy) ProcessCommands() {
@@ -268,6 +392,234 @@ func (gb *Gameboy) ProcessCommands() {
 					ram := cart.GetRAM()
 					if ram != nil {
 						copy(ram[cmd.Offset:], cmd.Data)
+					}
+				}
+				gb.Mu.Unlock()
+			case "ppu-state-write":
+				gb.Mu.Lock()
+				// Get current state
+				scanlineCounter, screenCleared, cgbMode := gb.GetPPUState()
+
+				// Apply updates from cmd.State
+				if lowByte, ok := cmd.State["scanlineCounter"]; ok {
+					highByte := cmd.State["scanlineCounter_high"] // May be 0 if not provided
+					scanlineCounter = int(lowByte) | (int(highByte) << 8)
+				}
+				if val, ok := cmd.State["screenCleared"]; ok {
+					screenCleared = val != 0
+				}
+				if val, ok := cmd.State["cgbMode"]; ok {
+					cgbMode = val != 0
+				}
+
+				gb.SetPPUState(scanlineCounter, screenCleared, cgbMode)
+				gb.Mu.Unlock()
+			case "ppu-tilescanline-write":
+				gb.Mu.Lock()
+				copy(gb.tileScanline[cmd.Offset:], cmd.Data)
+				gb.Mu.Unlock()
+			case "ppu-bgpalette-write":
+				gb.Mu.Lock()
+				// Serialize current state to 66-byte array
+				stateData := make([]byte, 66)
+				copy(stateData[0:64], gb.bgPalette.Palette)
+				stateData[64] = gb.bgPalette.Index
+				if gb.bgPalette.Inc {
+					stateData[65] = 0x01
+				} else {
+					stateData[65] = 0x00
+				}
+
+				// Apply write at offset
+				copy(stateData[cmd.Offset:], cmd.Data)
+
+				// Deserialize and update bgPalette
+				copy(gb.bgPalette.Palette, stateData[0:64])
+				gb.bgPalette.Index = stateData[64]
+				gb.bgPalette.Inc = stateData[65] != 0
+				gb.Mu.Unlock()
+			case "ppu-spritepalette-write":
+				gb.Mu.Lock()
+				// Serialize current state to 66-byte array
+				stateData := make([]byte, 66)
+				copy(stateData[0:64], gb.spritePalette.Palette)
+				stateData[64] = gb.spritePalette.Index
+				if gb.spritePalette.Inc {
+					stateData[65] = 0x01
+				} else {
+					stateData[65] = 0x00
+				}
+
+				// Apply write at offset
+				copy(stateData[cmd.Offset:], cmd.Data)
+
+				// Deserialize and update spritePalette
+				copy(gb.spritePalette.Palette, stateData[0:64])
+				gb.spritePalette.Index = stateData[64]
+				gb.spritePalette.Inc = stateData[65] != 0
+				gb.Mu.Unlock()
+			case "ppu-bgpriority-write":
+				gb.Mu.Lock()
+				// Get current packed state
+				packedData := gb.GetBGPriority()
+
+				// Apply write at offset
+				copy(packedData[cmd.Offset:], cmd.Data)
+
+				// Unpack into bgPriority array
+				for x := 0; x < ScreenWidth; x++ {
+					for y := 0; y < ScreenHeight; y++ {
+						byteIndex := x*18 + y/8
+						bitIndex := uint(y % 8)
+						gb.bgPriority[x][y] = (packedData[byteIndex] & (1 << bitIndex)) != 0
+					}
+				}
+				gb.Mu.Unlock()
+			case "ppu-screen-write":
+				gb.Mu.Lock()
+				// Get current flattened screen state
+				screenData := gb.GetScreen()
+
+				// Apply write at offset
+				copy(screenData[cmd.Offset:], cmd.Data)
+
+				// Unflatten back into PreparedData array
+				for x := 0; x < ScreenWidth; x++ {
+					for y := 0; y < ScreenHeight; y++ {
+						offset := x*ScreenHeight*3 + y*3
+						gb.PreparedData[x][y][0] = screenData[offset]     // R
+						gb.PreparedData[x][y][1] = screenData[offset+1]   // G
+						gb.PreparedData[x][y][2] = screenData[offset+2]   // B
+					}
+				}
+				gb.Mu.Unlock()
+			case "apu-state-write":
+				gb.Mu.Lock()
+				// Get current state
+				playing, memory, lVol, rVol, tickCounter := gb.sound.GetAPUState()
+
+				// Serialize to buffer
+				stateData := make([]byte, 77) // 1 + 52 + 8 + 8 + 8
+				stateData[0] = playing
+				copy(stateData[1:53], memory[:])
+				binary.LittleEndian.PutUint64(stateData[53:61], math.Float64bits(lVol))
+				binary.LittleEndian.PutUint64(stateData[61:69], math.Float64bits(rVol))
+				binary.LittleEndian.PutUint64(stateData[69:77], math.Float64bits(tickCounter))
+
+				// Apply write at offset
+				copy(stateData[cmd.Offset:], cmd.Data)
+
+				// Deserialize and update
+				playing = stateData[0]
+				copy(memory[:], stateData[1:53])
+				lVol = math.Float64frombits(binary.LittleEndian.Uint64(stateData[53:61]))
+				rVol = math.Float64frombits(binary.LittleEndian.Uint64(stateData[61:69]))
+				tickCounter = math.Float64frombits(binary.LittleEndian.Uint64(stateData[69:77]))
+
+				gb.sound.SetAPUState(playing, memory, lVol, rVol, tickCounter)
+				gb.Mu.Unlock()
+			case "cartridge-state-write":
+				gb.Mu.Lock()
+				cartridge := gb.GetCartridge()
+				if cartridge != nil {
+					// Type-switch on MBC to apply appropriate state fields
+					switch controller := cartridge.BankingController.(type) {
+					case *cart.MBC1:
+						// Extract current state
+						romBank, ramBank, ramEnabled, romBanking := controller.GetBankingState()
+						// Apply updates from cmd.State
+						if val, ok := cmd.State["romBank"]; ok {
+							romBank = uint32(val)
+						}
+						if val, ok := cmd.State["ramBank"]; ok {
+							ramBank = uint32(val)
+						}
+						if val, ok := cmd.State["ramEnabled"]; ok {
+							ramEnabled = val != 0
+						}
+						if val, ok := cmd.State["romBanking"]; ok {
+							romBanking = val != 0
+						}
+						controller.SetBankingState(romBank, ramBank, ramEnabled, romBanking)
+
+					case *cart.MBC2:
+						romBank, ramBank, ramEnabled := controller.GetBankingState()
+						if val, ok := cmd.State["romBank"]; ok {
+							romBank = uint32(val)
+						}
+						if val, ok := cmd.State["ramEnabled"]; ok {
+							ramEnabled = val != 0
+						}
+						controller.SetBankingState(romBank, ramBank, ramEnabled)
+
+					case *cart.MBC3:
+						// Banking state
+						romBank, ramBank, ramEnabled := controller.GetBankingState()
+						if val, ok := cmd.State["romBank"]; ok {
+							romBank = uint32(val)
+						}
+						if val, ok := cmd.State["ramBank"]; ok {
+							ramBank = uint32(val)
+						}
+						if val, ok := cmd.State["ramEnabled"]; ok {
+							ramEnabled = val != 0
+						}
+						controller.SetBankingState(romBank, ramBank, ramEnabled)
+
+						// RTC state
+						rtc, latchedRtc, latched := controller.GetRTCState()
+						if val, ok := cmd.State["rtcSeconds"]; ok {
+							rtc[0x08] = val
+						}
+						if val, ok := cmd.State["rtcMinutes"]; ok {
+							rtc[0x09] = val
+						}
+						if val, ok := cmd.State["rtcHours"]; ok {
+							rtc[0x0A] = val
+						}
+						if val, ok := cmd.State["rtcDaysLow"]; ok {
+							rtc[0x0B] = val
+						}
+						if val, ok := cmd.State["rtcDaysHigh"]; ok {
+							rtc[0x0C] = val
+						}
+						if val, ok := cmd.State["latchedSeconds"]; ok {
+							latchedRtc[0x08] = val
+						}
+						if val, ok := cmd.State["latchedMinutes"]; ok {
+							latchedRtc[0x09] = val
+						}
+						if val, ok := cmd.State["latchedHours"]; ok {
+							latchedRtc[0x0A] = val
+						}
+						if val, ok := cmd.State["latchedDaysLow"]; ok {
+							latchedRtc[0x0B] = val
+						}
+						if val, ok := cmd.State["latchedDaysHigh"]; ok {
+							latchedRtc[0x0C] = val
+						}
+						if val, ok := cmd.State["rtcLatched"]; ok {
+							latched = val != 0
+						}
+						controller.SetRTCState(rtc[0x08], rtc[0x09], rtc[0x0A], rtc[0x0B], rtc[0x0C],
+							latchedRtc[0x08], latchedRtc[0x09], latchedRtc[0x0A], latchedRtc[0x0B], latchedRtc[0x0C],
+							latched)
+
+					case *cart.MBC5:
+						romBank, ramBank, ramEnabled := controller.GetBankingState()
+						if val, ok := cmd.State["romBank"]; ok {
+							romBank = uint32(val)
+						}
+						if val, ok := cmd.State["ramBank"]; ok {
+							ramBank = uint32(val)
+						}
+						if val, ok := cmd.State["ramEnabled"]; ok {
+							ramEnabled = val != 0
+						}
+						controller.SetBankingState(romBank, ramBank, ramEnabled)
+
+					case *cart.ROM:
+						// ROM-only has no banking state, ignore writes
 					}
 				}
 				gb.Mu.Unlock()

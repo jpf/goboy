@@ -22,6 +22,7 @@ func setupTestBinaryFS(size int64, cmdName string) (*binaryMemoryFS, *gb.Gameboy
 		getMemory:   func(*gb.Gameboy) []byte { return memory },
 		size:        size,
 		commandName: cmdName,
+		name:        "memory",
 	}
 
 	return fsys, gameboy, memory

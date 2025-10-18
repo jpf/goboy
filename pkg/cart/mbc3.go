@@ -105,3 +105,26 @@ func (r *MBC3) GetBankingState() (romBank uint32, ramBank uint32, ramEnabled boo
 func (r *MBC3) GetRTCState() (rtc []byte, latchedRtc []byte, latched bool) {
 	return r.rtc, r.latchedRtc, r.latched
 }
+
+// SetBankingState updates the banking state from 9P writes.
+func (r *MBC3) SetBankingState(romBank, ramBank uint32, ramEnabled bool) {
+	r.romBank = romBank
+	r.ramBank = ramBank
+	r.ramEnabled = ramEnabled
+}
+
+// SetRTCState updates the RTC state from 9P writes.
+func (r *MBC3) SetRTCState(rtcSeconds, rtcMinutes, rtcHours, rtcDaysLow, rtcDaysHigh byte,
+	latchedSeconds, latchedMinutes, latchedHours, latchedDaysLow, latchedDaysHigh byte, latched bool) {
+	r.rtc[0x08] = rtcSeconds
+	r.rtc[0x09] = rtcMinutes
+	r.rtc[0x0A] = rtcHours
+	r.rtc[0x0B] = rtcDaysLow
+	r.rtc[0x0C] = rtcDaysHigh
+	r.latchedRtc[0x08] = latchedSeconds
+	r.latchedRtc[0x09] = latchedMinutes
+	r.latchedRtc[0x0A] = latchedHours
+	r.latchedRtc[0x0B] = latchedDaysLow
+	r.latchedRtc[0x0C] = latchedDaysHigh
+	r.latched = latched
+}

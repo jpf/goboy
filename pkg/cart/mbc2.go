@@ -84,3 +84,10 @@ func (r *MBC2) GetBankingState() (romBank uint32, ramBank uint32, ramEnabled boo
 	// MBC2 doesn't have RAM banking, so ramBank is always 0
 	return r.romBank, 0, r.ramEnabled
 }
+
+// SetBankingState updates the banking state from 9P writes.
+func (r *MBC2) SetBankingState(romBank, ramBank uint32, ramEnabled bool) {
+	r.romBank = romBank
+	// MBC2 doesn't have RAM banking, ramBank parameter is ignored
+	r.ramEnabled = ramEnabled
+}

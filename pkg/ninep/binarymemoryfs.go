@@ -18,6 +18,7 @@ type binaryMemoryFS struct {
 	getMemory   func(*gb.Gameboy) []byte // Returns slice of memory region
 	size        int64
 	commandName string
+	name        string
 }
 
 type binaryMemoryFile struct {
@@ -48,7 +49,7 @@ func (f *binaryMemoryFile) Stat() (fs.FileInfo, error) {
 	}
 
 	return &binaryMemoryFileInfo{
-		name: "memory",
+		name: f.parent.name,
 		size: size,
 	}, nil
 }

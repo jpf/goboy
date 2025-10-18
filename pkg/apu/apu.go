@@ -346,3 +346,32 @@ func (a *APU) extractEnvelope(val byte) (volume, direction, sweep byte) {
 	sweep = val & 0x7
 	return
 }
+
+// GetAPUState returns the current APU state for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (a *APU) GetAPUState() (playing byte, memory [52]byte, lVol, rVol, tickCounter float64) {
+	if a.playing {
+		playing = 1
+	}
+	memory = a.memory
+	lVol = a.lVol
+	rVol = a.rVol
+	tickCounter = a.tickCounter
+	return
+}
+
+// SetAPUState updates the APU state from 9P writes.
+// Caller must hold Gameboy.Mu lock.
+func (a *APU) SetAPUState(playing byte, memory [52]byte, lVol, rVol, tickCounter float64) {
+	a.playing = playing != 0
+	a.memory = memory
+	a.lVol = lVol
+	a.rVol = rVol
+	a.tickCounter = tickCounter
+}
+
+// GetWaveformRAM returns the waveform RAM for 9P access.
+// Caller must hold Gameboy.Mu lock.
+func (a *APU) GetWaveformRAM() []byte {
+	return a.waveformRam
+}
