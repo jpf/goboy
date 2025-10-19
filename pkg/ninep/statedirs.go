@@ -76,6 +76,10 @@ func (d *stateDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 		qid := d.attacher.qids.Get(p9.TypeDir)
 		logf("stateDir.Walk() -> ppu directory")
 		return []p9.QID{qid}, &ppuDir{attacher: d.attacher, qid: qid}, nil
+	case "buttons":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("stateDir.Walk() -> buttons file")
+		return []p9.QID{qid}, newButtonsFile(d.attacher.gameboy, qid), nil
 	default:
 		logf("stateDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
@@ -97,6 +101,7 @@ func (d *stateDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) {
 		typ  p9.QIDType
 	}{
 		{"apu", p9.TypeDir},
+		{"buttons", p9.TypeRegular},
 		{"cartridge", p9.TypeDir},
 		{"cpu", p9.TypeRegular},
 		{"memory", p9.TypeDir},

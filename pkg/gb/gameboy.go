@@ -233,6 +233,15 @@ func (gb *Gameboy) GetTileScanline() *[160]uint8 {
 	return &gb.tileScanline
 }
 
+// GetInputMask returns the current button input mask for 9P access.
+// Caller must hold Gameboy.Mu lock.
+// Bit 0 = A, Bit 1 = B, Bit 2 = Select, Bit 3 = Start,
+// Bit 4 = Right, Bit 5 = Left, Bit 6 = Up, Bit 7 = Down.
+// Bit is 0 when button is pressed, 1 when released.
+func (gb *Gameboy) GetInputMask() byte {
+	return gb.inputMask
+}
+
 // GetBGPalette returns pointer to serialized bgPalette data for 9P access.
 // Caller must hold Gameboy.Mu lock.
 func (gb *Gameboy) GetBGPalette() *[66]byte {
@@ -659,6 +668,16 @@ func (gb *Gameboy) ProcessCommands() {
 				fmt.Printf("Loaded ROM: %s\n", newCart.GetName())
 
 				gb.Mu.Unlock()
+			case "button-press":
+				if len(cmd.Data) == 1 {
+					button := Button(cmd.Data[0])
+					gb.pressButton(button)
+				}
+			case "button-release":
+				if len(cmd.Data) == 1 {
+					button := Button(cmd.Data[0])
+					gb.releaseButton(button)
+				}
 			default:
 				// Unknown command, ignore
 			}

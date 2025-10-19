@@ -184,3 +184,53 @@ func TestProcessCommands_StepCommand(t *testing.T) {
 	// Update() requires a fully initialized emulator with ROM loaded.
 	// The command processing logic is tested via manual/integration tests.
 }
+
+func TestProcessCommands_ButtonPress(t *testing.T) {
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Queue button-press command for button A
+	gb.CommandChan <- Command{
+		Name: "button-press",
+		Data: []byte{byte(ButtonA)},
+	}
+
+	// Note: Can't call ProcessCommands() without ROM loaded.
+	// Verify command was queued correctly
+	select {
+	case cmd := <-gb.CommandChan:
+		assert.Equal(t, "button-press", cmd.Name)
+		assert.Equal(t, []byte{byte(ButtonA)}, cmd.Data)
+	default:
+		t.Fatal("Expected button-press command in channel")
+	}
+}
+
+func TestProcessCommands_ButtonRelease(t *testing.T) {
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Queue button-release command for button B
+	gb.CommandChan <- Command{
+		Name: "button-release",
+		Data: []byte{byte(ButtonB)},
+	}
+
+	// Verify command was queued correctly
+	select {
+	case cmd := <-gb.CommandChan:
+		assert.Equal(t, "button-release", cmd.Name)
+		assert.Equal(t, []byte{byte(ButtonB)}, cmd.Data)
+	default:
+		t.Fatal("Expected button-release command in channel")
+	}
+}
+
+func TestGetInputMask(t *testing.T) {
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Initially all buttons should be released (all bits set)
+	mask := gb.GetInputMask()
+	assert.Equal(t, byte(0xFF), mask)
+}
