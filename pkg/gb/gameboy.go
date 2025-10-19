@@ -26,6 +26,7 @@ type Command struct {
 	Data     []byte             // For binary writes
 	State    map[string]byte    // For text state writes (memorystate)
 	CPUState map[string]uint16  // For CPU state writes
+	Count    int                // For step command (number of frames)
 }
 
 // Gameboy is the master struct which contains all of the sub components
@@ -332,6 +333,18 @@ func (gb *Gameboy) ProcessCommands() {
 				gb.Mu.Lock()
 				gb.Reset()
 				gb.Mu.Unlock()
+			case "step":
+				// Step only works when paused
+				if !gb.IsPaused() {
+					// Silently ignore - command queue doesn't support error returns
+					continue
+				}
+				// Execute N frames while temporarily unpausing
+				for i := 0; i < cmd.Count; i++ {
+					gb.SetPaused(false)
+					gb.Update()
+					gb.SetPaused(true)
+				}
 			case "vram-write":
 				// Lock for write safety
 				gb.Mu.Lock()

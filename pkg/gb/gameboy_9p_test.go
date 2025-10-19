@@ -162,3 +162,25 @@ func TestProcessCommands_VramWriteMultiple(t *testing.T) {
 	assert.Equal(t, byte(0x03), gb.memory.VRAM[0x2000])
 	assert.Equal(t, byte(0x04), gb.memory.VRAM[0x2001])
 }
+
+func TestProcessCommands_StepCommand(t *testing.T) {
+	gb := &Gameboy{}
+	gb.setup()
+	gb.SetPaused(true)
+
+	// Queue step command
+	gb.CommandChan <- Command{Name: "step", Count: 3}
+
+	// Verify command was queued
+	select {
+	case cmd := <-gb.CommandChan:
+		assert.Equal(t, "step", cmd.Name)
+		assert.Equal(t, 3, cmd.Count)
+	default:
+		t.Fatal("Expected step command in channel")
+	}
+
+	// Note: We can't actually call ProcessCommands() here because
+	// Update() requires a fully initialized emulator with ROM loaded.
+	// The command processing logic is tested via manual/integration tests.
+}

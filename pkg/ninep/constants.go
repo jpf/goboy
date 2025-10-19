@@ -8,4 +8,5 @@ const (
 	CommandPause  = "pause"
 	CommandResume = "resume"
 	CommandReset  = "reset"
+	CommandStep   = "step"
 )

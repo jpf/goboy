@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,7 +46,7 @@ func (f *ctlFile) Read(p []byte) (n int, err error) {
 		status = "paused"
 	}
 
-	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state\n", status)
+	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state\nstep [N] - advance N frames (default 1, requires paused)\n", status)
 
 	// Read from current position
 	if f.readPos >= len(content) {
@@ -65,12 +67,31 @@ func (f *ctlFile) Write(p []byte) (n int, err error) {
 		return len(p), nil
 	}
 
+	// Parse command - may have arguments (e.g., "step 10")
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return len(p), nil
+	}
+
+	cmdName := parts[0]
+
 	// Send command to emulator
-	switch command {
+	switch cmdName {
 	case CommandPause, CommandResume, CommandReset:
-		f.parent.gb.GetCommandChan() <- gb.Command{Name: command}
+		f.parent.gb.GetCommandChan() <- gb.Command{Name: cmdName}
+	case CommandStep:
+		// Parse optional frame count (default 1)
+		count := 1
+		if len(parts) > 1 {
+			if c, err := strconv.Atoi(parts[1]); err == nil && c > 0 {
+				count = c
+			} else {
+				return 0, fmt.Errorf("invalid step count: %s", parts[1])
+			}
+		}
+		f.parent.gb.GetCommandChan() <- gb.Command{Name: CommandStep, Count: count}
 	default:
-		return 0, fmt.Errorf("unknown command: %s", command)
+		return 0, fmt.Errorf("unknown command: %s", cmdName)
 	}
 
 	return len(p), nil
@@ -86,7 +107,7 @@ func (f *ctlFile) Stat() (fs.FileInfo, error) {
 	if f.parent.gb.IsPaused() {
 		status = "paused"
 	}
-	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state\n", status)
+	content := fmt.Sprintf("%s\n\npause - pause emulation\nresume - resume emulation\nreset - reset to power-on state\nstep [N] - advance N frames (default 1, requires paused)\n", status)
 
 	return &ctlFileInfo{
 		name: "ctl",

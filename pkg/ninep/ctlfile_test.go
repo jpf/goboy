@@ -176,3 +176,101 @@ func TestCtlFileStat(t *testing.T) {
 	assert.Equal(t, fs.FileMode(0666), info.Mode().Perm())
 	assert.Greater(t, info.Size(), int64(0))
 }
+
+func TestCtlFileWrite_StepDefault(t *testing.T) {
+	gameboy := testGameboy()
+	gameboy.SetPaused(true)
+
+	ctlfs := newCtlFS(gameboy)
+	file, err := ctlfs.Open(".")
+	require.NoError(t, err)
+	defer file.Close()
+
+	writer, ok := file.(interface{ Write([]byte) (int, error) })
+	require.True(t, ok)
+
+	// Write step command
+	n, err := writer.Write([]byte("step"))
+	require.NoError(t, err)
+	assert.Equal(t, 4, n)
+
+	// Verify command was queued with count=1
+	select {
+	case cmd := <-gameboy.CommandChan:
+		assert.Equal(t, "step", cmd.Name)
+		assert.Equal(t, 1, cmd.Count)
+	default:
+		t.Fatal("Expected step command in channel")
+	}
+}
+
+func TestCtlFileWrite_StepWithCount(t *testing.T) {
+	gameboy := testGameboy()
+	gameboy.SetPaused(true)
+
+	ctlfs := newCtlFS(gameboy)
+	file, err := ctlfs.Open(".")
+	require.NoError(t, err)
+	defer file.Close()
+
+	writer, ok := file.(interface{ Write([]byte) (int, error) })
+	require.True(t, ok)
+
+	// Write step command with count
+	n, err := writer.Write([]byte("step 10"))
+	require.NoError(t, err)
+	assert.Equal(t, 7, n)
+
+	// Verify command was queued with count=10
+	select {
+	case cmd := <-gameboy.CommandChan:
+		assert.Equal(t, "step", cmd.Name)
+		assert.Equal(t, 10, cmd.Count)
+	default:
+		t.Fatal("Expected step command in channel")
+	}
+}
+
+func TestCtlFileWrite_StepInvalidCount(t *testing.T) {
+	gameboy := testGameboy()
+	gameboy.SetPaused(true)
+
+	ctlfs := newCtlFS(gameboy)
+	file, err := ctlfs.Open(".")
+	require.NoError(t, err)
+	defer file.Close()
+
+	writer, ok := file.(interface{ Write([]byte) (int, error) })
+	require.True(t, ok)
+
+	// Write step command with invalid count
+	_, err = writer.Write([]byte("step invalid"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid step count")
+
+	// Write step command with negative count
+	_, err = writer.Write([]byte("step -5"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid step count")
+
+	// Write step command with zero count
+	_, err = writer.Write([]byte("step 0"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid step count")
+}
+
+func TestCtlFileRead_IncludesStepCommand(t *testing.T) {
+	gameboy := testGameboy()
+
+	ctlfs := newCtlFS(gameboy)
+	file, err := ctlfs.Open(".")
+	require.NoError(t, err)
+	defer file.Close()
+
+	buf := make([]byte, 1024)
+	n, err := file.Read(buf)
+	require.NoError(t, err)
+
+	content := string(buf[:n])
+	assert.Contains(t, content, "step [N] - advance N frames")
+}
