@@ -100,6 +100,10 @@ func (d *rootDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 		qid := d.attacher.qids.Get(p9.TypeRegular)
 		logf("rootDir.Walk() -> rom file")
 		return []p9.QID{qid}, newROMFile(d.attacher.gameboy, qid), nil
+	case "remote-control.py":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("rootDir.Walk() -> remote-control.py file")
+		return []p9.QID{qid}, newRemoteCtlFile(qid), nil
 	case "state":
 		qid := d.attacher.qids.Get(p9.TypeDir)
 		logf("rootDir.Walk() -> state directory")
@@ -128,6 +132,7 @@ func (d *rootDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) {
 	}{
 		{"README", p9.TypeRegular},
 		{"ctl", p9.TypeRegular},
+		{"remote-control.py", p9.TypeRegular},
 		{"state", p9.TypeDir},
 	}
 
