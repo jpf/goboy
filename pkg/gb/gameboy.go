@@ -627,6 +627,25 @@ func (gb *Gameboy) ProcessCommands() {
 					}
 				}
 				gb.Mu.Unlock()
+			case "rom-load":
+				gb.Mu.Lock()
+
+				// Create new cartridge from ROM data
+				newCart := cart.NewCart(cmd.Data, "")
+
+				// Swap cartridge
+				gb.memory.Cart = newCart
+
+				// Reset emulator
+				gb.Reset()
+
+				// Update CGB mode
+				hasCGB := newCart.GetMode()&cart.CGB != 0
+				gb.cgbMode = gb.options.cgbMode && hasCGB
+
+				fmt.Printf("Loaded ROM: %s\n", newCart.GetName())
+
+				gb.Mu.Unlock()
 			default:
 				// Unknown command, ignore
 			}

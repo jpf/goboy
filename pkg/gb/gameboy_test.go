@@ -345,3 +345,47 @@ func TestProcessCommands_Reset(t *testing.T) {
 		t.Errorf("After reset command: timerCounter = %d, want 0", gb.timerCounter)
 	}
 }
+
+func TestProcessCommands_ROMLoad(t *testing.T) {
+	// Create fully initialized gameboy
+	gb := &Gameboy{}
+	gb.setup()
+
+	// Load an initial ROM via the normal path (setup doesn't load a ROM)
+	// We'll skip this and just verify the command works
+
+	// Create a minimal valid ROM
+	rom := make([]byte, 32*1024) // 32KB
+	// Set title
+	copy(rom[0x0134:0x0143], "TEST ROM")
+	// Calculate checksum
+	checksum := byte(0)
+	for addr := 0x0134; addr <= 0x014C; addr++ {
+		checksum = checksum - rom[addr] - 1
+	}
+	rom[0x014D] = checksum
+
+	// Queue rom-load command
+	gb.CommandChan <- Command{
+		Name: "rom-load",
+		Data: rom,
+	}
+
+	// Process the command
+	gb.ProcessCommands()
+
+	// Verify ROM was loaded
+	if gb.memory.Cart == nil {
+		t.Fatal("After rom-load command: Cart is nil")
+	}
+
+	// Verify cart title matches
+	if gb.memory.Cart.GetName() != "TEST ROM" {
+		t.Errorf("After rom-load: Cart name = %s, want TEST ROM", gb.memory.Cart.GetName())
+	}
+
+	// Verify emulator was reset (PC should be at boot value)
+	if gb.cpu.PC != 0x100 {
+		t.Errorf("After rom-load: PC = 0x%04X, want 0x0100", gb.cpu.PC)
+	}
+}

@@ -89,6 +89,9 @@ func (d *rootDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 	case "ctl":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
 		return []p9.QID{qid}, newCtlFile(d.attacher.gameboy, qid), nil
+	case "rom":
+		qid := d.attacher.qids.Get(p9.TypeRegular)
+		return []p9.QID{qid}, newROMFile(d.attacher.gameboy, qid), nil
 	case "state":
 		qid := d.attacher.qids.Get(p9.TypeDir)
 		return []p9.QID{qid}, &stateDir{attacher: d.attacher, qid: qid}, nil
@@ -320,5 +323,101 @@ func (f *p9CtlFile) Remove() error {
 
 // Rename implements p9.File.Rename
 func (f *p9CtlFile) Rename(directory p9.File, name string) error {
+	return syscall.EPERM
+}
+
+// p9ROMFile implements p9.File for ROM loading
+type p9ROMFile struct {
+	statfs
+	p9.DefaultWalkGetAttr
+	templatefs.NotDirectoryFile
+	templatefs.NotSymlinkFile
+	templatefs.NoopRenamed
+	templatefs.XattrUnimplemented
+	templatefs.NotLockable
+
+	qid     p9.QID
+	gameboy *gb.Gameboy
+	romfs   *romFS
+	romfile *romFile
+	opened  bool
+}
+
+func newROMFile(gameboy *gb.Gameboy, qid p9.QID) *p9ROMFile {
+	return &p9ROMFile{
+		qid:     qid,
+		gameboy: gameboy,
+		romfs:   newROMFS(gameboy),
+	}
+}
+
+// Walk implements p9.File.Walk
+func (f *p9ROMFile) Walk(names []string) ([]p9.QID, p9.File, error) {
+	if len(names) == 0 {
+		return []p9.QID{f.qid}, f, nil
+	}
+	return nil, nil, syscall.ENOTDIR
+}
+
+// Open implements p9.File.Open
+func (f *p9ROMFile) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
+	f.opened = true
+	// Open underlying romFile for writing
+	fsFile, _ := f.romfs.Open(".")
+	f.romfile = fsFile.(*romFile)
+	return f.qid, 4096, nil
+}
+
+// GetAttr implements p9.File.GetAttr
+func (f *p9ROMFile) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) {
+	return f.qid, req, p9.Attr{
+		Mode:      p9.ModeRegular | 0222, // Write-only
+		UID:       p9.UID(os.Getuid()),
+		GID:       p9.GID(os.Getgid()),
+		Size:      0,
+		BlockSize: 4096,
+	}, nil
+}
+
+// SetAttr implements p9.File.SetAttr
+func (f *p9ROMFile) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
+	return nil
+}
+
+// ReadAt implements p9.File.ReadAt
+func (f *p9ROMFile) ReadAt(p []byte, offset int64) (int, error) {
+	// ROM file is write-only
+	return 0, syscall.EPERM
+}
+
+// WriteAt implements p9.File.WriteAt
+func (f *p9ROMFile) WriteAt(p []byte, offset int64) (int, error) {
+	if !f.opened || f.romfile == nil {
+		return 0, syscall.EINVAL
+	}
+	// romFile.Write() handles buffering
+	return f.romfile.Write(p)
+}
+
+// Close implements p9.File.Close
+func (f *p9ROMFile) Close() error {
+	if f.romfile != nil {
+		return f.romfile.Close()
+	}
+	return nil
+}
+
+// FSync implements p9.File.FSync
+func (f *p9ROMFile) FSync() error {
+	return nil
+}
+
+// Remove implements p9.File.Remove
+func (f *p9ROMFile) Remove() error {
+	return syscall.EPERM
+}
+
+// Rename implements p9.File.Rename
+func (f *p9ROMFile) Rename(directory p9.File, name string) error {
 	return syscall.EPERM
 }
