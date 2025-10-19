@@ -61,6 +61,8 @@ Other options:
 
 Debug or experimental options:
 ```sh
+  -9p-port int
+    	enable 9P server on port (0 = disabled)
   -cpuprofile string
     	write cpu profile to file (debugging)
   -disableVsync
@@ -69,6 +71,95 @@ Debug or experimental options:
     	step through opcodes (debugging)
   -unlocked
     	if to unlock the cpu speed (debugging)
+```
+
+### 9P Filesystem Interface
+
+GoBoy includes a 9P2000.L server that exposes the emulator's internal state as a virtual filesystem. This enables advanced features like:
+
+- **Save states** - Save and restore complete emulator state using standard Unix tools
+- **Live debugging** - Inspect and modify CPU registers, memory, and graphics state in real-time
+- **TAS (Tool-Assisted Speedrun) support** - Frame-perfect state reproduction
+- **ROM hacking** - Direct access to memory and graphics data
+
+#### Quick Start
+
+Start the emulator with 9P enabled:
+```sh
+./goboy --9p-port 5640 pokemon.gb
+```
+
+On Linux, mount the filesystem:
+```sh
+mkdir -p /tmp/goboy
+sudo mount -t 9p -o trans=tcp,port=5640,version=9p2000.L localhost /tmp/goboy
+```
+
+On macOS/other systems, use the included test client:
+```sh
+# List files
+./test-9p-client localhost:5640 ls /
+
+# Read CPU state
+./test-9p-client localhost:5640 cat /state/cpu
+
+# Pause emulation
+./test-9p-client localhost:5640 write /ctl "pause"
+```
+
+#### Save States
+
+Create a complete save state:
+```sh
+# Pause emulator
+echo "pause" > /tmp/goboy/ctl
+
+# Save all state
+tar -czf save-state.tar.gz -C /tmp/goboy state/
+
+# Resume
+echo "resume" > /tmp/goboy/ctl
+```
+
+Restore a save state:
+```sh
+echo "pause" > /tmp/goboy/ctl
+tar -xzf save-state.tar.gz -C /tmp/goboy
+echo "resume" > /tmp/goboy/ctl
+```
+
+#### Filesystem Structure
+
+```
+/
+├── README          # Interface documentation
+├── ctl             # Control commands (pause/resume)
+└── state/
+    ├── cpu         # CPU registers and timers
+    ├── memory/
+    │   ├── vram        # Video RAM (16KB)
+    │   ├── wram        # Work RAM (36KB)
+    │   ├── oam         # Sprite data (256B)
+    │   ├── highram     # I/O registers (256B)
+    │   └── state       # Memory banking state
+    ├── cartridge/
+    │   ├── info        # ROM header (read-only)
+    │   ├── ram         # Save data
+    │   └── state       # MBC banking state
+    ├── apu/
+    │   └── state       # Audio state (77B)
+    └── ppu/
+        ├── state       # PPU internal state
+        ├── screen      # Frame buffer (69KB RGB)
+        ├── bgpalette   # Background palette
+        ├── spritepalette # Sprite palette
+        ├── bgpriority  # Priority map
+        └── tilescanline # Scanline data
+```
+
+For complete documentation, see the built-in README:
+```sh
+cat /tmp/goboy/README
 ```
 
 ### Debugging
@@ -121,7 +212,7 @@ task from the TODO list below!
 - [ ] Speed up CPU and PPU
 - [ ] Platform native UI?
 - [ ] More DMG colour palettes
-- [ ] Support save-states
+- [x] Support save-states (via 9P filesystem)
 - [ ] Support boot roms
 - [ ] [Blargg's test ROMs](http://gbdev.gg8.se/wiki/articles/Test_ROMs)
 

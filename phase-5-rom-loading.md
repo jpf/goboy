@@ -12,17 +12,6 @@ Phase 5 adds the ability to load new ROMs via the 9P filesystem interface and im
 2. **Reset Command**: Add `reset` command to `/ctl` for power-on state
 3. **Save File Handling**: Automatically load .sav file for battery-backed carts
 
-## Why This Was Deferred
-
-ROM loading was originally in Phase 3 but moved to Phase 5 because:
-
-1. **Unknown unknowns**: Unclear if GoBoy supports hot-swapping ROMs without restart
-2. **Not critical for save states**: Users can start emulator with desired ROM from CLI
-3. **Complex state management**: Need to understand reset flow, .sav loading, GUI coordination
-4. **High risk**: Could be 2 hours or 16 hours depending on what we discover
-
-**Decision**: Get CPU and cartridge state working first (Phase 3), then tackle ROM loading when we have more context.
-
 ## Investigation Required Before Implementation
 
 ### 1. ROM Loading Flow
