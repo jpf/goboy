@@ -104,6 +104,10 @@ func (d *rootDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 		qid := d.attacher.qids.Get(p9.TypeDir)
 		logf("rootDir.Walk() -> state directory")
 		return []p9.QID{qid}, &stateDir{attacher: d.attacher, qid: qid}, nil
+	case "meta":
+		qid := d.attacher.qids.Get(p9.TypeDir)
+		logf("rootDir.Walk() -> meta directory")
+		return []p9.QID{qid}, &metaDir{attacher: d.attacher, qid: qid}, nil
 	default:
 		logf("rootDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
@@ -128,6 +132,7 @@ func (d *rootDir) Readdir(offset uint64, count uint32) (p9.Dirents, error) {
 	}{
 		{"README", p9.TypeRegular},
 		{"ctl", p9.TypeRegular},
+		{"meta", p9.TypeDir},
 		{"state", p9.TypeDir},
 	}
 

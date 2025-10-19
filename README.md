@@ -195,12 +195,62 @@ echo "step" > /tmp/goboy/ctl
 echo "resume" > /tmp/goboy/ctl
 ```
 
+#### Graphics Visualization
+
+The `/meta/vram.png` file provides a bidirectional PNG interface to VRAM tile data, enabling visual inspection and editing of graphics using standard image tools.
+
+Reading VRAM as PNG:
+```sh
+# Export current VRAM contents as PNG
+cat /tmp/goboy/meta/vram.png > vram-dump.png
+
+# View with any image viewer
+open vram-dump.png  # macOS
+xdg-open vram-dump.png  # Linux
+```
+
+The PNG format:
+- **Dimensions**: 128×512 pixels (16 tiles wide × 64 tiles tall)
+- **Color palette**: DMG grayscale (white, light gray, dark gray, black)
+- **Layout**: 8×8 pixel tiles in a grid (1:1 pixel mapping, no scaling)
+
+Writing PNG to VRAM:
+```sh
+# Edit graphics in any image editor (GIMP, Photoshop, etc.)
+# Must use exact DMG colors and dimensions
+
+# Write modified PNG back to VRAM
+cat modified-tiles.png > /tmp/goboy/meta/vram.png
+```
+
+**Validation**: Writes are strictly validated - invalid dimensions or colors are rejected with an error message.
+
+Example - Extract and modify Mario sprite:
+```sh
+echo "pause" > /tmp/goboy/ctl
+
+# Export current VRAM
+cat /tmp/goboy/meta/vram.png > mario-tiles.png
+
+# Edit mario-tiles.png in image editor
+# (Change colors, modify sprites, etc.)
+
+# Import modified tiles
+cat mario-tiles.png > /tmp/goboy/meta/vram.png
+
+echo "resume" > /tmp/goboy/ctl
+```
+
+**Note**: Writes are processed asynchronously. Pause emulation for immediate effect.
+
 #### Filesystem Structure
 
 ```
 /
 ├── README          # Interface documentation
 ├── ctl             # Control commands (pause/resume/step)
+├── meta/
+│   └── vram.png    # VRAM visualization (read/write PNG)
 └── state/
     ├── cpu         # CPU registers and timers
     ├── buttons     # Button input (read/write)
