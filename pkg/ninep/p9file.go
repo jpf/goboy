@@ -68,7 +68,7 @@ type rootDir struct {
 // Open implements p9.File.Open
 func (d *rootDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 	logf("rootDir.Open(mode=%v)", mode)
-	if mode == p9.ReadOnly {
+	if mode.Mode() == p9.ReadOnly {
 		return d.qid, 4096, nil
 	}
 	logf("rootDir.Open() failed: write not permitted")

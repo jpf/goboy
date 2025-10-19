@@ -31,7 +31,7 @@ type stateDir struct {
 }
 
 func (d *stateDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
-	if mode == p9.ReadOnly {
+	if mode.Mode() == p9.ReadOnly {
 		return d.qid, 4096, nil
 	}
 	return p9.QID{}, 0, syscall.EPERM
@@ -216,7 +216,7 @@ type cartridgeDir struct {
 }
 
 func (d *cartridgeDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
-	if mode == p9.ReadOnly {
+	if mode.Mode() == p9.ReadOnly {
 		return d.qid, 4096, nil
 	}
 	return p9.QID{}, 0, syscall.EPERM
@@ -424,7 +424,7 @@ type memoryDir struct {
 }
 
 func (d *memoryDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
-	if mode == p9.ReadOnly {
+	if mode.Mode() == p9.ReadOnly {
 		return d.qid, 4096, nil
 	}
 	return p9.QID{}, 0, syscall.EPERM
@@ -667,7 +667,7 @@ type apuDir struct {
 }
 
 func (d *apuDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
-	if mode == p9.ReadOnly {
+	if mode.Mode() == p9.ReadOnly {
 		return d.qid, 4096, nil
 	}
 	return p9.QID{}, 0, syscall.EPERM
@@ -870,7 +870,7 @@ type ppuDir struct {
 }
 
 func (d *ppuDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
-	if mode == p9.ReadOnly {
+	if mode.Mode() == p9.ReadOnly {
 		return d.qid, 4096, nil
 	}
 	return p9.QID{}, 0, syscall.EPERM
