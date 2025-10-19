@@ -899,8 +899,8 @@ func (gb *Gameboy) Reset() {
 		}
 	}
 
-	// Reset APU
-	gb.sound.Init(gb.options.sound)
+	// Reset APU (preserves audio context to avoid "oto: NewContext can be called only once" panic)
+	gb.sound.Reset()
 
 	// Reset misc state
 	gb.timerCounter = 0

@@ -71,6 +71,39 @@ func (a *APU) Init(sound bool) {
 	}
 }
 
+// Reset resets the APU state without recreating the audio context.
+// This is used when resetting the emulator to avoid the "oto: NewContext can be called only once" panic.
+func (a *APU) Reset() {
+	// Reset memory
+	a.memory = [52]byte{}
+
+	// Reset waveform RAM to default pattern
+	for x := 0x0; x < 0x20; x++ {
+		if x&2 == 0 {
+			a.waveformRam[x] = 0x00
+		} else {
+			a.waveformRam[x] = 0xFF
+		}
+	}
+
+	// Drain and recreate audio buffer channel
+	close(a.audioBuffer)
+	a.audioBuffer = make(chan [2]byte, maxFrameBufferLength)
+
+	// Reset channels
+	a.chn1 = NewChannel()
+	a.chn2 = NewChannel()
+	a.chn3 = NewChannel()
+	a.chn4 = NewChannel()
+
+	// Reset volume and tick counter
+	a.lVol = 0
+	a.rVol = 0
+	a.tickCounter = 0
+
+	// Keep a.playing, a.player unchanged (preserve audio context)
+}
+
 // Starts a goroutine which plays the sound
 func (a *APU) playSound(bufferSeconds int) {
 	frameTime := time.Second / time.Duration(bufferSeconds)
