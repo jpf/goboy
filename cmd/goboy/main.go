@@ -21,6 +21,7 @@ var (
 	dmgMode = flag.Bool("dmg", false, "set to force dmg mode")
 
 	ninepPort = flag.Int("9p-port", 0, "enable 9P server on port (0 = disabled)")
+	verbose   = flag.Bool("v", false, "enable verbose logging (9P connections and operations)")
 
 	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to file (debugging)")
 	vsyncOff    = flag.Bool("disableVsync", false, "set to disable vsync (debugging)")
@@ -71,7 +72,7 @@ func start(binding gb.IOBinding) {
 
 	// Start 9P server if requested
 	if *ninepPort != 0 {
-		if err := ninep.Start(gameboy, *ninepPort); err != nil {
+		if err := ninep.Start(gameboy, *ninepPort, *verbose); err != nil {
 			log.Printf("Failed to start 9P server: %v", err)
 		} else {
 			printNinePInstructions(*ninepPort)

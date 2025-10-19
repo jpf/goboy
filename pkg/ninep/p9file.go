@@ -32,6 +32,7 @@ func NewP9Attacher(gameboy *gb.Gameboy) p9.Attacher {
 
 // Attach implements p9.Attacher
 func (a *p9Attacher) Attach() (p9.File, error) {
+	logf("Attach() called - creating root directory")
 	return &rootDir{
 		attacher: a,
 		qid:      a.qids.Get(p9.TypeDir),
@@ -66,36 +67,45 @@ type rootDir struct {
 
 // Open implements p9.File.Open
 func (d *rootDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
+	logf("rootDir.Open(mode=%v)", mode)
 	if mode == p9.ReadOnly {
 		return d.qid, 4096, nil
 	}
+	logf("rootDir.Open() failed: write not permitted")
 	return p9.QID{}, 0, syscall.EPERM
 }
 
 // Walk implements p9.File.Walk
 func (d *rootDir) Walk(names []string) ([]p9.QID, p9.File, error) {
+	logf("rootDir.Walk(names=%v)", names)
 	if len(names) == 0 {
 		return []p9.QID{d.qid}, d, nil
 	}
 
 	if len(names) > 1 {
+		logf("rootDir.Walk() failed: multi-component walk not supported")
 		return nil, nil, syscall.ENOENT
 	}
 
 	switch names[0] {
 	case "README":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("rootDir.Walk() -> README file")
 		return []p9.QID{qid}, &readmeFile{qid: qid}, nil
 	case "ctl":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("rootDir.Walk() -> ctl file")
 		return []p9.QID{qid}, newCtlFile(d.attacher.gameboy, qid), nil
 	case "rom":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("rootDir.Walk() -> rom file")
 		return []p9.QID{qid}, newROMFile(d.attacher.gameboy, qid), nil
 	case "state":
 		qid := d.attacher.qids.Get(p9.TypeDir)
+		logf("rootDir.Walk() -> state directory")
 		return []p9.QID{qid}, &stateDir{attacher: d.attacher, qid: qid}, nil
 	default:
+		logf("rootDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 }

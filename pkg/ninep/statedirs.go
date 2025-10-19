@@ -38,37 +38,46 @@ func (d *stateDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 }
 
 func (d *stateDir) Walk(names []string) ([]p9.QID, p9.File, error) {
+	logf("stateDir.Walk(names=%v)", names)
 	if len(names) == 0 {
 		return []p9.QID{d.qid}, d, nil
 	}
 
 	if len(names) > 1 {
+		logf("stateDir.Walk() failed: multi-component walk not supported")
 		return nil, nil, syscall.ENOENT
 	}
 
 	// Check if file has been "deleted" (for tar extraction)
 	path := "state/" + names[0]
 	if _, deleted := d.attacher.unlinked.Load(path); deleted {
+		logf("stateDir.Walk() failed: '%s' marked as deleted", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 
 	switch names[0] {
 	case "memory":
 		qid := d.attacher.qids.Get(p9.TypeDir)
+		logf("stateDir.Walk() -> memory directory")
 		return []p9.QID{qid}, &memoryDir{attacher: d.attacher, qid: qid}, nil
 	case "cpu":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("stateDir.Walk() -> cpu file")
 		return []p9.QID{qid}, newP9CPUFile(d.attacher.gameboy, qid), nil
 	case "cartridge":
 		qid := d.attacher.qids.Get(p9.TypeDir)
+		logf("stateDir.Walk() -> cartridge directory")
 		return []p9.QID{qid}, &cartridgeDir{attacher: d.attacher, qid: qid}, nil
 	case "apu":
 		qid := d.attacher.qids.Get(p9.TypeDir)
+		logf("stateDir.Walk() -> apu directory")
 		return []p9.QID{qid}, &apuDir{attacher: d.attacher, qid: qid}, nil
 	case "ppu":
 		qid := d.attacher.qids.Get(p9.TypeDir)
+		logf("stateDir.Walk() -> ppu directory")
 		return []p9.QID{qid}, &ppuDir{attacher: d.attacher, qid: qid}, nil
 	default:
+		logf("stateDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 }
@@ -214,23 +223,27 @@ func (d *cartridgeDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 }
 
 func (d *cartridgeDir) Walk(names []string) ([]p9.QID, p9.File, error) {
+	logf("cartridgeDir.Walk(names=%v)", names)
 	if len(names) == 0 {
 		return []p9.QID{d.qid}, d, nil
 	}
 
 	if len(names) > 1 {
+		logf("cartridgeDir.Walk() failed: multi-component walk not supported")
 		return nil, nil, syscall.ENOENT
 	}
 
 	// Check if file has been "deleted" (for tar extraction)
 	path := "state/cartridge/" + names[0]
 	if _, deleted := d.attacher.unlinked.Load(path); deleted {
+		logf("cartridgeDir.Walk() failed: '%s' marked as deleted", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 
 	switch names[0] {
 	case "info":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("cartridgeDir.Walk() -> info file")
 		return []p9.QID{qid}, newP9CartridgeInfoFile(d.attacher.gameboy, qid), nil
 	case "ram":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
@@ -247,11 +260,14 @@ func (d *cartridgeDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "cartridge-ram-write",
 			name:        "ram",
 		}
+		logf("cartridgeDir.Walk() -> ram file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	case "state":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("cartridgeDir.Walk() -> state file")
 		return []p9.QID{qid}, newP9CartridgeStateFile(d.attacher.gameboy, qid), nil
 	default:
+		logf("cartridgeDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 }
@@ -415,23 +431,27 @@ func (d *memoryDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 }
 
 func (d *memoryDir) Walk(names []string) ([]p9.QID, p9.File, error) {
+	logf("memoryDir.Walk(names=%v)", names)
 	if len(names) == 0 {
 		return []p9.QID{d.qid}, d, nil
 	}
 
 	if len(names) > 1 {
+		logf("memoryDir.Walk() failed: multi-component walk not supported")
 		return nil, nil, syscall.ENOENT
 	}
 
 	// Check if file has been "deleted" (for tar extraction)
 	path := "state/memory/" + names[0]
 	if _, deleted := d.attacher.unlinked.Load(path); deleted {
+		logf("memoryDir.Walk() failed: '%s' marked as deleted", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 
 	switch names[0] {
 	case "vram":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("memoryDir.Walk() -> vram file")
 		return []p9.QID{qid}, newP9VramFile(d.attacher.gameboy, qid), nil
 
 	case "wram":
@@ -443,6 +463,7 @@ func (d *memoryDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "wram-write",
 			name:        "wram",
 		}
+		logf("memoryDir.Walk() -> wram file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 
 	case "oam":
@@ -454,6 +475,7 @@ func (d *memoryDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "oam-write",
 			name:        "oam",
 		}
+		logf("memoryDir.Walk() -> oam file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 
 	case "highram":
@@ -465,13 +487,16 @@ func (d *memoryDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "highram-write",
 			name:        "highram",
 		}
+		logf("memoryDir.Walk() -> highram file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 
 	case "state":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("memoryDir.Walk() -> state file")
 		return []p9.QID{qid}, newP9MemoryStateFile(d.attacher.gameboy, qid), nil
 
 	default:
+		logf("memoryDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 }
@@ -649,17 +674,20 @@ func (d *apuDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 }
 
 func (d *apuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
+	logf("apuDir.Walk(names=%v)", names)
 	if len(names) == 0 {
 		return []p9.QID{d.qid}, d, nil
 	}
 
 	if len(names) > 1 {
+		logf("apuDir.Walk() failed: multi-component walk not supported")
 		return nil, nil, syscall.ENOENT
 	}
 
 	// Check if file has been "deleted" (for tar extraction)
 	path := "state/apu/" + names[0]
 	if _, deleted := d.attacher.unlinked.Load(path); deleted {
+		logf("apuDir.Walk() failed: '%s' marked as deleted", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 
@@ -686,8 +714,10 @@ func (d *apuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "apu-state-write",
 			name:        "state",
 		}
+		logf("apuDir.Walk() -> state file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	default:
+		logf("apuDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 }
@@ -847,23 +877,27 @@ func (d *ppuDir) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 }
 
 func (d *ppuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
+	logf("ppuDir.Walk(names=%v)", names)
 	if len(names) == 0 {
 		return []p9.QID{d.qid}, d, nil
 	}
 
 	if len(names) > 1 {
+		logf("ppuDir.Walk() failed: multi-component walk not supported")
 		return nil, nil, syscall.ENOENT
 	}
 
 	// Check if file has been "deleted" (for tar extraction)
 	path := "state/ppu/" + names[0]
 	if _, deleted := d.attacher.unlinked.Load(path); deleted {
+		logf("ppuDir.Walk() failed: '%s' marked as deleted", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 
 	switch names[0] {
 	case "state":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
+		logf("ppuDir.Walk() -> state file")
 		return []p9.QID{qid}, newP9PPUStateFile(d.attacher.gameboy, qid), nil
 	case "tilescanline":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
@@ -874,6 +908,7 @@ func (d *ppuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "ppu-tilescanline-write",
 			name:        "tilescanline",
 		}
+		logf("ppuDir.Walk() -> tilescanline file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	case "bgpalette":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
@@ -884,6 +919,7 @@ func (d *ppuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "ppu-bgpalette-write",
 			name:        "bgpalette",
 		}
+		logf("ppuDir.Walk() -> bgpalette file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	case "spritepalette":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
@@ -894,6 +930,7 @@ func (d *ppuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "ppu-spritepalette-write",
 			name:        "spritepalette",
 		}
+		logf("ppuDir.Walk() -> spritepalette file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	case "bgpriority":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
@@ -904,6 +941,7 @@ func (d *ppuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "ppu-bgpriority-write",
 			name:        "bgpriority",
 		}
+		logf("ppuDir.Walk() -> bgpriority file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	case "screen":
 		qid := d.attacher.qids.Get(p9.TypeRegular)
@@ -914,8 +952,10 @@ func (d *ppuDir) Walk(names []string) ([]p9.QID, p9.File, error) {
 			commandName: "ppu-screen-write",
 			name:        "screen",
 		}
+		logf("ppuDir.Walk() -> screen file")
 		return []p9.QID{qid}, newP9BinaryFile(d.attacher.gameboy, qid, fsys), nil
 	default:
+		logf("ppuDir.Walk() failed: '%s' not found", names[0])
 		return nil, nil, syscall.ENOENT
 	}
 }

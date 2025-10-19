@@ -6,10 +6,21 @@ package ninep
 import (
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/hugelgupf/p9/p9"
 	"github.com/Humpheh/goboy/pkg/gb"
 )
+
+// verbose controls whether to log 9P operations to stderr
+var verbose bool
+
+// logf prints formatted message to stderr if verbose logging is enabled
+func logf(format string, args ...interface{}) {
+	if verbose {
+		fmt.Fprintf(os.Stderr, "[9P] "+format+"\n", args...)
+	}
+}
 
 const readmeContent = `GoBoy 9P Interface
 ==================
@@ -191,7 +202,10 @@ NOTES
 
 // Start launches the 9P server on the specified port.
 // Returns error if server fails to start.
-func Start(gameboy *gb.Gameboy, port int) error {
+func Start(gameboy *gb.Gameboy, port int, enableVerbose bool) error {
+	// Set global verbose flag
+	verbose = enableVerbose
+
 	// Create TCP listener
 	addr := fmt.Sprintf(":%d", port)
 	serverSocket, err := net.Listen("tcp", addr)
@@ -199,14 +213,34 @@ func Start(gameboy *gb.Gameboy, port int) error {
 		return fmt.Errorf("failed to listen on port %d: %w", port, err)
 	}
 
+	logf("9P server listening on %s", addr)
+
 	// Create p9 attacher with native p9.File implementation
 	attacher := NewP9Attacher(gameboy)
 	server := p9.NewServer(attacher)
 
-	// Launch in goroutine
+	// Launch in goroutine with connection logging
 	go func() {
-		if err := server.Serve(serverSocket); err != nil {
-			fmt.Printf("9P server error: %v\n", err)
+		for {
+			conn, err := serverSocket.Accept()
+			if err != nil {
+				logf("Accept error: %v", err)
+				continue
+			}
+
+			logf("New connection from %s", conn.RemoteAddr())
+
+			// Handle connection in goroutine
+			go func(c net.Conn) {
+				defer func() {
+					logf("Connection closed from %s", c.RemoteAddr())
+					c.Close()
+				}()
+
+				if err := server.Handle(c, c); err != nil {
+					logf("Connection error from %s: %v", c.RemoteAddr(), err)
+				}
+			}(conn)
 		}
 	}()
 
