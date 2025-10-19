@@ -128,14 +128,82 @@ tar -xzf save-state.tar.gz -C /tmp/goboy
 echo "resume" > /tmp/goboy/ctl
 ```
 
+#### Frame Stepping
+
+Execute the game frame-by-frame for debugging or TAS creation:
+
+```sh
+# Pause the game
+echo "pause" > /tmp/goboy/ctl
+
+# Advance exactly 1 frame
+echo "step" > /tmp/goboy/ctl
+
+# Advance N frames (e.g., 10 frames)
+echo "step 10" > /tmp/goboy/ctl
+```
+
+The `step` command executes frames while paused. This is essential for:
+- **Tool-Assisted Speedruns (TAS)** - Frame-perfect input timing
+- **Debugging** - Step through execution to find bugs
+- **Testing** - Verify game behavior at specific frames
+
+#### Button Input
+
+Control game buttons remotely via the `/state/buttons` file. Reading shows currently pressed buttons, writing sends button commands.
+
+Reading button state:
+```sh
+# Show currently pressed buttons (empty if none pressed)
+cat /state/buttons
+
+# Example output: "a start" (when A and Start are pressed)
+```
+
+Button command formats:
+```sh
+# Momentary press (press + auto-release next frame)
+echo "a" > /state/buttons
+echo "start" > /state/buttons
+
+# Explicit press (button stays pressed until released)
+echo "press left" > /state/buttons
+
+# Explicit release
+echo "release left" > /state/buttons
+```
+
+Available buttons: `a`, `b`, `start`, `select`, `up`, `down`, `left`, `right`
+
+TAS example - Create frame-perfect input sequence:
+```sh
+echo "pause" > /tmp/goboy/ctl
+
+# Frame 1: Press A
+echo "a" > /state/buttons
+echo "step" > /tmp/goboy/ctl
+
+# Frame 2-5: Hold right
+echo "press right" > /state/buttons
+echo "step 4" > /tmp/goboy/ctl
+echo "release right" > /state/buttons
+
+# Frame 6: Jump
+echo "a" > /state/buttons
+echo "step" > /tmp/goboy/ctl
+
+echo "resume" > /tmp/goboy/ctl
+```
+
 #### Filesystem Structure
 
 ```
 /
 ├── README          # Interface documentation
-├── ctl             # Control commands (pause/resume)
+├── ctl             # Control commands (pause/resume/step)
 └── state/
     ├── cpu         # CPU registers and timers
+    ├── buttons     # Button input (read/write)
     ├── memory/
     │   ├── vram        # Video RAM (16KB)
     │   ├── wram        # Work RAM (36KB)
